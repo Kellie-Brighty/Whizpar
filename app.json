@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "goseeep",
-    "slug": "goseeep",
+    "name": "Whizpar",
+    "slug": "whizpar",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,16 +13,39 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kelliebrighty.whizpar"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": ["android.permission.RECORD_AUDIO"],
+      "package": "com.kelliebrighty.whizpar"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Whizpar to access your photos to share images.",
+          "cameraPermission": "Allow Whizpar to access your camera to take photos."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e6f39acf-ad55-4f30-b5b9-f8c56a188763"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e6f39acf-ad55-4f30-b5b9-f8c56a188763"
     }
   }
 }
