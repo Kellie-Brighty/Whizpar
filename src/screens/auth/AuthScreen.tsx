@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
 } from "react-native";
 import { Surface } from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -33,6 +34,7 @@ import {
   ErrorMask,
 } from "../../components/animations";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { RandomAvatar } from "../../components/RandomAvatar";
 
 const { width, height } = Dimensions.get("window");
 
@@ -56,9 +58,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
   const [hasBiometrics, setHasBiometrics] = useState(false);
   const formPosition = useSharedValue(0);
   const maskPosition = useSharedValue(0);
+  const [selectedAvatar, setSelectedAvatar] = useState<string>("defaultSeed");
 
   useEffect(() => {
     checkBiometricAvailability().then(setHasBiometrics);
+    // Load the stored avatar seed if available
+    const loadAvatar = async () => {
+      const storedAvatar = await AsyncStorage.getItem("@user_avatar");
+      if (storedAvatar) {
+        setSelectedAvatar(storedAvatar);
+      }
+    };
+    loadAvatar();
   }, []);
 
   const toggleMode = () => {
@@ -138,6 +149,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
         <MaskAnimation scale={useSharedValue(1)} rotate={maskPosition} />
         <Animated.View style={[styles.titleContainer, maskAnimatedStyle]}>
           <Text style={styles.title}>Whizpar</Text>
+          <View style={styles.avatarContainer}>
+            <RandomAvatar seed={selectedAvatar} />
+          </View>
           <Text style={styles.subtitle}>
             {isLogin ? "Welcome back, stranger" : "Join anonymously"}
           </Text>
@@ -217,7 +231,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#121212",
   },
   header: {
-    height: height * 0.35,
+    height: height * 0.45,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -312,5 +326,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 12,
+  },
+  avatarContainer: {
+    alignItems: "center",
+    marginVertical: 0,
+    marginBottom: 20,
+  },
+  changeAvatarText: {
+    color: "#7C4DFF",
+    marginTop: 10,
   },
 });

@@ -1,65 +1,104 @@
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { FeedScreen } from "../screens/feed/FeedScreen";
-import { ProfileScreen } from "../screens/profile/ProfileScreen";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { StyleSheet, View, Dimensions } from "react-native";
+import React from 'react';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { BlurView } from 'expo-blur';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  withSequence,
-  interpolate,
-  withDelay,
-} from "react-native-reanimated";
-import { BlurView } from "expo-blur";
+  interpolateColor,
+  useSharedValue,
+} from 'react-native-reanimated';
+import { FeedScreen } from '../screens/feed/FeedScreen';
+import { ProfileScreen } from '../screens/profile/ProfileScreen';
 
-const { width } = Dimensions.get("window");
-const TAB_WIDTH = width;
 const Tab = createBottomTabNavigator();
+const { width } = Dimensions.get('window');
 
-const TabIcon = ({ focused, name }: { focused: boolean; name: string }) => {
-  const iconStyle = useAnimatedStyle(() => {
+const CustomTabBar = ({ state, descriptors, navigation }) => {
+  const tabWidth = width / state.routes.length;
+  const activeIndex = useSharedValue(0);
+
+  const indicatorStyle = useAnimatedStyle(() => {
     return {
       transform: [
         {
-          translateY: withSequence(
-            withSpring(focused ? -8 : 0, {
-              damping: 12,
-              stiffness: 200,
-            }),
-            withDelay(
-              150,
-              withSpring(focused ? -4 : 0, {
-                damping: 8,
-                stiffness: 150,
-              })
-            )
-          ),
-        },
-        {
-          scale: withSpring(focused ? 1.2 : 1, {
+          translateX: withSpring(activeIndex.value * tabWidth, {
             damping: 15,
-            stiffness: 200,
+            stiffness: 150,
           }),
         },
       ],
     };
-  }, [focused]);
-
-  const dotStyle = useAnimatedStyle(() => {
-    return {
-      opacity: withSpring(focused ? 1 : 0, { damping: 20 }),
-      width: withSpring(focused ? 4 : 0, { damping: 15 }),
-      height: withSpring(focused ? 4 : 0, { damping: 15 }),
-    };
-  }, [focused]);
+  });
 
   return (
-    <View style={styles.iconWrapper}>
-      <Animated.View style={[styles.iconContainer, iconStyle]}>
-        <Icon name={name} size={24} color={focused ? "#7C4DFF" : "#6B6B6B"} />
-      </Animated.View>
-      <Animated.View style={[styles.dot, dotStyle]} />
+    <View style={styles.container}>
+      <BlurView intensity={30} style={StyleSheet.absoluteFill} />
+      <Animated.View style={[styles.indicator, indicatorStyle]} />
+      <View style={styles.tabContainer}>
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          const isFocused = state.index === index;
+
+          const iconName = 
+            route.name === 'Feed' ? 'home' :
+            route.name === 'Profile' ? 'account' : 'home';
+
+          const AnimatedIcon = Animated.createAnimatedComponent(Icon);
+          const iconScale = useSharedValue(1);
+          const iconRotate = useSharedValue(0);
+
+          const iconStyle = useAnimatedStyle(() => {
+            return {
+              transform: [
+                { scale: iconScale.value },
+                { rotate: `${iconRotate.value}deg` },
+              ],
+            };
+          });
+
+          const handlePress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+              activeIndex.value = index;
+              iconScale.value = withSpring(1.2, {}, () => {
+                iconScale.value = withSpring(1);
+              });
+              iconRotate.value = withTiming(360, {
+                duration: 500,
+              }, () => {
+                iconRotate.value = 0;
+              });
+            }
+          };
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              style={styles.tab}
+              onPress={handlePress}
+              activeOpacity={0.7}
+            >
+              <AnimatedIcon
+                name={iconName}
+                size={24}
+                style={[
+                  iconStyle,
+                  { color: isFocused ? '#7C4DFF' : '#6B6B6B' },
+                ]}
+              />
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 };
@@ -67,88 +106,42 @@ const TabIcon = ({ focused, name }: { focused: boolean; name: string }) => {
 export const MainTabNavigator = () => {
   return (
     <Tab.Navigator
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
-        tabBarBackground: () => (
-          <BlurView intensity={30} style={StyleSheet.absoluteFill}>
-            <View style={styles.tabBarBackground}>
-              <View style={styles.innerShadow} />
-            </View>
-          </BlurView>
-        ),
       }}
     >
-      <Tab.Screen
-        name="Feed"
-        component={FeedScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} name="home" />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} name="account" />
-          ),
-        }}
-      />
+      <Tab.Screen name="Feed" component={FeedScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
-  tabBar: {
-    position: "absolute",
+  container: {
+    position: 'absolute',
     bottom: 20,
-    width: TAB_WIDTH,
-    height: 65,
-    backgroundColor: "transparent",
-    borderTopWidth: 0,
-    elevation: 0,
-    borderRadius: 32,
-    paddingBottom: 8,
-    overflow: "hidden",
+    left: 20,
+    right: 20,
+    height: 70,
+    backgroundColor: 'rgba(30, 30, 30, 0.7)',
+    borderRadius: 35,
+    overflow: 'hidden',
   },
-  tabBarBackground: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    backgroundColor: "rgba(30, 30, 30, 0.85)",
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: "#2A2A2A",
+  tabContainer: {
+    flexDirection: 'row',
+    height: '100%',
   },
-  innerShadow: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    borderRadius: 32,
-    backgroundColor: "#1E1E1E",
-    borderWidth: 1,
-    borderColor: "#2A2A2A",
-    opacity: 0.5,
+  tab: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  iconWrapper: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 60,
-    width: TAB_WIDTH / 2,
-  },
-  iconContainer: {
-    width: 45,
-    height: 45,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  dot: {
-    backgroundColor: "#7C4DFF",
-    borderRadius: 2,
-    marginTop: 4,
+  indicator: {
+    position: 'absolute',
+    width: width / 2 - 20,
+    height: '100%',
+    backgroundColor: 'rgba(124, 77, 255, 0.1)',
+    borderRadius: 35,
   },
 });

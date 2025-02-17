@@ -32,9 +32,13 @@ const { width } = Dimensions.get("window");
 
 interface PostProps {
   post: PostType;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
+  onLike?: () => void;
+  likeAnimatedStyle?: { transform: { scale: number; }[]; };
 }
 
-export const Post: React.FC<PostProps> = ({ post }) => {
+export const Post: React.FC<PostProps> = ({ post, onPressIn, onPressOut, onLike, likeAnimatedStyle }) => {
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const heartScale = useSharedValue(0);

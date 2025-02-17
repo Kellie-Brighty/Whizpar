@@ -1,7 +1,11 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React from "react";
+import { StyleSheet, View } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import Animated, { SharedValue, interpolate, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, {
+  SharedValue,
+  interpolate,
+  useAnimatedStyle,
+} from "react-native-reanimated";
 
 interface MaskAnimationProps {
   scale: SharedValue<number>;
@@ -10,19 +14,19 @@ interface MaskAnimationProps {
   size?: number;
 }
 
-export const MaskAnimation: React.FC<MaskAnimationProps> = ({ 
+export const MaskAnimation: React.FC<MaskAnimationProps> = ({
   scale,
   rotate,
   color = "#7C4DFF",
-  size = 80
+  size = 80,
 }) => {
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
       { scale: scale.value },
       {
         rotate: `${interpolate(rotate.value, [0, 1], [0, 360])}deg`,
-      }
-    ]
+      },
+    ],
   }));
 
   return (
@@ -36,10 +40,10 @@ export const MaskAnimation: React.FC<MaskAnimationProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconContainer: {
     padding: 12,
   },
-}); 
+});

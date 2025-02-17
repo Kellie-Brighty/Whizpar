@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,8 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Modal,
+  FlatList,
+  SafeAreaView,
+  Linking,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView as SafeAreaViewCompat } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import Animated, {
   useAnimatedScrollHandler,
@@ -15,21 +19,39 @@ import Animated, {
   useSharedValue,
   withSpring,
   interpolate,
+  withTiming,
+  FadeIn,
+  FadeOut,
 } from "react-native-reanimated";
-import { BlurView } from 'expo-blur';
+import { BlurView } from "expo-blur";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { RandomAvatar } from "../../components/RandomAvatar";
+import { LinearGradient } from "expo-linear-gradient";
+import MaskedView from "@react-native-masked-view/masked-view";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 const HEADER_MAX_HEIGHT = 250;
 const HEADER_MIN_HEIGHT = 80;
 const AVATAR_MAX_SIZE = 80;
 const AVATAR_MIN_SIZE = 40;
+const AVATAR_SIZE = 100;
+const AVATAR_MARGIN = 12;
+const NUM_COLUMNS = 3;
+const MODAL_PADDING = 24;
+const MODAL_WIDTH = Math.min(
+  width * 0.95,
+  (AVATAR_SIZE + AVATAR_MARGIN * 2) * NUM_COLUMNS + MODAL_PADDING * 1
+);
 
-type ProfileScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+const WHIZPAR_ABOUT_URL = "https://whizpar.com/about";
+const GRADIENT_COLORS = ["#7C4DFF", "#FF4D9C"] as const;
+
+type ProfileScreenNavigationProp =
+  NativeStackNavigationProp<RootStackParamList>;
 
 export const ProfileScreen = () => {
   const scrollY = useSharedValue(0);
@@ -133,6 +155,48 @@ export const ProfileScreen = () => {
 
   const navigation = useNavigation<ProfileScreenNavigationProp>();
 
+  const [avatarSeed, setAvatarSeed] = useState<string>("defaultSeed");
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [selectedPreviewSeed, setSelectedPreviewSeed] = useState<string | null>(
+    null
+  );
+  const modalScale = useSharedValue(0.8);
+  const previewScale = useSharedValue(1);
+
+  const modalAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: modalScale.value }],
+  }));
+
+  const previewAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: previewScale.value }],
+  }));
+
+  useEffect(() => {
+    const loadAvatar = async () => {
+      const storedAvatar = await AsyncStorage.getItem("@user_avatar");
+      if (storedAvatar) {
+        setAvatarSeed(storedAvatar);
+      }
+    };
+
+    loadAvatar();
+  }, []);
+
+  const handleAvatarSelect = async (seed: string) => {
+    try {
+      console.log("Selected Avatar Seed:", seed);
+      setAvatarSeed(seed);
+      await AsyncStorage.setItem("@user_avatar", seed);
+      setModalVisible(false);
+    } catch (error) {
+      console.error("Error storing avatar:", error);
+    }
+  };
+
+  const avatarSeeds = Array.from({ length: 10 }, () =>
+    Math.random().toString(36).substring(7)
+  );
+
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem("@auth_token");
@@ -146,13 +210,22 @@ export const ProfileScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "right", "left"]}>
+    <SafeAreaViewCompat
+      style={styles.container}
+      edges={["top", "right", "left"]}
+    >
       <Animated.View style={[styles.header, headerStyle]}>
         <BlurView intensity={40} style={StyleSheet.absoluteFill} />
         <Animated.View style={[styles.headerContent, headerContentStyle]}>
-          <Animated.View style={[styles.avatar, avatarStyle]}>
-            <Icon name="incognito" size={40} color="#7C4DFF" />
-          </Animated.View>
+          <View style={styles.avatarWrapper}>
+            <RandomAvatar seed={avatarSeed} />
+            <TouchableOpacity
+              style={styles.editIcon}
+              onPress={() => setModalVisible(true)}
+            >
+              <Icon name="pencil" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.username}>Anonymous</Text>
           <Text style={styles.bio}>Whispering thoughts into the void</Text>
         </Animated.View>
@@ -166,15 +239,32 @@ export const ProfileScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.stats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>42</Text>
-            <Text style={styles.statLabel}>Whispers</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>1.2k</Text>
-            <Text style={styles.statLabel}>Impact</Text>
-          </View>
+          <LinearGradient
+            colors={GRADIENT_COLORS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statsGradient}
+          >
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>42</Text>
+              <Text style={styles.statLabel}>Whispers</Text>
+              <View style={styles.statIconContainer}>
+                <Icon
+                  name="message-text"
+                  size={20}
+                  color="rgba(255,255,255,0.3)"
+                />
+              </View>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>1.2k</Text>
+              <Text style={styles.statLabel}>Impact</Text>
+              <View style={styles.statIconContainer}>
+                <Icon name="star" size={20} color="rgba(255,255,255,0.3)" />
+              </View>
+            </View>
+          </LinearGradient>
         </View>
 
         <View style={styles.section}>
@@ -206,7 +296,7 @@ export const ProfileScreen = () => {
           ))}
         </View>
 
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
           <TouchableOpacity style={styles.settingItem}>
             <Icon name="theme-light-dark" size={24} color="#7C4DFF" />
@@ -228,9 +318,110 @@ export const ProfileScreen = () => {
             <Text style={styles.settingText}>Logout</Text>
             <Icon name="chevron-right" size={24} color="#6B6B6B" />
           </TouchableOpacity>
+        </View> */}
+
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => Linking.openURL(WHIZPAR_ABOUT_URL)}
+          >
+            <LinearGradient
+              colors={["rgba(124, 77, 255, 0.2)", "rgba(124, 77, 255, 0.1)"]}
+              style={styles.actionButtonGradient}
+            >
+              <Icon name="information" size={24} color="#7C4DFF" />
+              <Text style={styles.actionButtonText}>About Whizpar</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionButton} onPress={handleLogout}>
+            <LinearGradient
+              colors={["rgba(255, 77, 77, 0.2)", "rgba(255, 77, 77, 0.1)"]}
+              style={styles.actionButtonGradient}
+            >
+              <Icon name="logout" size={24} color="#FF4D4D" />
+              <Text style={[styles.actionButtonText, { color: "#FF4D4D" }]}>
+                Logout
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
       </Animated.ScrollView>
-    </SafeAreaView>
+
+      <Modal
+        visible={isModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <BlurView intensity={20} style={styles.modalContainer}>
+          <Animated.View
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(200)}
+            style={[styles.modalContent, modalAnimatedStyle]}
+          >
+            <LinearGradient
+              colors={["rgba(124, 77, 255, 0.2)", "rgba(30, 30, 30, 0.95)"]}
+              style={styles.modalGradient}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Choose Your Avatar</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setModalVisible(false)}
+                >
+                  <Icon name="close-circle" size={30} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+
+              {selectedPreviewSeed && (
+                <Animated.View
+                  style={[styles.previewContainer, previewAnimatedStyle]}
+                >
+                  <RandomAvatar seed={selectedPreviewSeed} />
+                  <TouchableOpacity
+                    style={styles.selectButton}
+                    onPress={() => handleAvatarSelect(selectedPreviewSeed)}
+                  >
+                    <Text style={styles.selectButtonText}>Select</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
+
+              <FlatList
+                data={avatarSeeds}
+                keyExtractor={(item) => item}
+                numColumns={NUM_COLUMNS}
+                contentContainerStyle={styles.avatarList}
+                columnWrapperStyle={styles.columnWrapper}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedPreviewSeed(item);
+                      previewScale.value = withSpring(1.1, {}, () => {
+                        previewScale.value = withSpring(1);
+                      });
+                    }}
+                    style={[
+                      styles.avatarTouchable,
+                      selectedPreviewSeed === item &&
+                        styles.avatarTouchableSelected,
+                    ]}
+                  >
+                    <RandomAvatar seed={item} />
+                    {selectedPreviewSeed === item && (
+                      <View style={styles.selectedOverlay}>
+                        <Icon name="check-circle" size={24} color="#7C4DFF" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )}
+              />
+            </LinearGradient>
+          </Animated.View>
+        </BlurView>
+      </Modal>
+    </SafeAreaViewCompat>
   );
 };
 
@@ -240,7 +431,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#121212",
   },
   header: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
@@ -249,23 +440,25 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 30,
     elevation: 4,
     zIndex: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   headerContent: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#2A2A2A",
+  avatarWrapper: {
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: "#7C4DFF",
+  },
+  editIcon: {
+    position: "absolute",
+    bottom: 0,
+    right: -10,
+    backgroundColor: "#7C4DFF",
+    borderRadius: 12,
+    padding: 4,
   },
   username: {
     color: "#FFFFFF",
@@ -281,34 +474,48 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stats: {
+    margin: 16,
+    borderRadius: 20,
+    overflow: "hidden",
+    elevation: 8,
+    shadowColor: "#7C4DFF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  statsGradient: {
     flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 24,
-    backgroundColor: "#1E1E1E",
-    marginHorizontal: 16,
-    marginTop: -30,
-    borderRadius: 16,
-    elevation: 4,
+    padding: 24,
+    justifyContent: "space-between",
   },
   statItem: {
-    alignItems: "center",
     flex: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: "#2A2A2A",
+    alignItems: "center",
+    position: "relative",
   },
   statNumber: {
-    color: "#7C4DFF",
-    fontSize: 24,
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontSize: 32,
+    fontWeight: "700",
     marginBottom: 4,
   },
   statLabel: {
-    color: "#6B6B6B",
-    fontSize: 14,
+    color: "rgba(255,255,255,0.8)",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  statIconContainer: {
+    position: "absolute",
+    right: -20,
+    bottom: -10,
+    opacity: 0.5,
+    transform: [{ rotate: "-15deg" }],
+  },
+  statDivider: {
+    width: 1,
+    height: "100%",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    marginHorizontal: 20,
   },
   section: {
     padding: 16,
@@ -374,5 +581,116 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: HEADER_MAX_HEIGHT,
     paddingBottom: 100,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+  },
+  modalContent: {
+    width: MODAL_WIDTH,
+    maxHeight: height * 0.85,
+    backgroundColor: "#1E1E1E",
+    borderRadius: 25,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(124, 77, 255, 0.3)",
+  },
+  modalGradient: {
+    padding: MODAL_PADDING,
+    alignItems: "center",
+  },
+  modalTitle: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  previewContainer: {
+    alignItems: "center",
+    marginBottom: 24,
+    padding: 24,
+    backgroundColor: "rgba(124, 77, 255, 0.1)",
+    borderRadius: 20,
+    width: "100%",
+  },
+  selectButton: {
+    backgroundColor: "#7C4DFF",
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 15,
+  },
+  selectButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  avatarList: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 10,
+    width: "100%",
+  },
+  columnWrapper: {
+    justifyContent: "center",
+  },
+  avatarTouchable: {
+    margin: AVATAR_MARGIN,
+    borderRadius: 20,
+    padding: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderWidth: 2,
+    borderColor: "transparent",
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+  },
+  avatarTouchableSelected: {
+    borderColor: "#7C4DFF",
+    backgroundColor: "rgba(124, 77, 255, 0.1)",
+  },
+  selectedOverlay: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 2,
+  },
+  closeButton: {
+    padding: 10,
+    alignItems: "center",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 20,
+  },
+  actionButtons: {
+    padding: 16,
+    gap: 12,
+  },
+  actionButton: {
+    borderRadius: 16,
+    overflow: "hidden",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  actionButtonGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 12,
+  },
+  actionButtonText: {
+    color: "#7C4DFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
