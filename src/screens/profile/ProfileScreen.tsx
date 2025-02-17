@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -32,6 +32,10 @@ import { RandomAvatar } from "../../components/RandomAvatar";
 import { LinearGradient } from "expo-linear-gradient";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { fonts } from "../../theme/fonts";
+import { CoinPurchaseSheet } from "../../components/sheets/CoinPurchaseSheet";
+import { TransactionHistorySheet } from "../../components/sheets/TransactionHistorySheet";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { AvatarPickerSheet } from "../../components/sheets/AvatarPickerSheet";
 
 const { width, height } = Dimensions.get("window");
 
@@ -172,6 +176,10 @@ export const ProfileScreen = () => {
     transform: [{ scale: previewScale.value }],
   }));
 
+  const purchaseSheetRef = useRef<BottomSheetModal>(null);
+  const historySheetRef = useRef<BottomSheetModal>(null);
+  const avatarPickerRef = useRef<BottomSheetModal>(null);
+
   useEffect(() => {
     const loadAvatar = async () => {
       const storedAvatar = await AsyncStorage.getItem("@user_avatar");
@@ -210,6 +218,14 @@ export const ProfileScreen = () => {
     }
   };
 
+  const handleBuyCoins = () => {
+    purchaseSheetRef.current?.present();
+  };
+
+  const handleShowHistory = () => {
+    historySheetRef.current?.present();
+  };
+
   return (
     <SafeAreaViewCompat
       style={styles.container}
@@ -222,7 +238,7 @@ export const ProfileScreen = () => {
             <RandomAvatar seed={avatarSeed} />
             <TouchableOpacity
               style={styles.editIcon}
-              onPress={() => setModalVisible(true)}
+              onPress={() => avatarPickerRef.current?.present()}
             >
               <Icon name="pencil" size={24} color="#FFFFFF" />
             </TouchableOpacity>
@@ -263,6 +279,70 @@ export const ProfileScreen = () => {
               <Text style={styles.statLabel}>Impact</Text>
               <View style={styles.statIconContainer}>
                 <Icon name="star" size={20} color="rgba(255,255,255,0.3)" />
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
+
+        <View style={styles.coinsSection}>
+          <LinearGradient
+            colors={["rgba(255, 215, 0, 0.15)", "rgba(124, 77, 255, 0.15)"]}
+            style={styles.coinsContainer}
+          >
+            <Animated.View
+              entering={FadeIn.duration(500)}
+              style={styles.balanceContainer}
+            >
+              <Icon name="cash" size={32} color="#FFD700" />
+              <Text style={styles.balanceText}>1,250</Text>
+              <Text style={styles.coinLabel}>Whizpar Coins</Text>
+            </Animated.View>
+
+            <View style={styles.coinActions}>
+              <TouchableOpacity
+                style={styles.coinActionButton}
+                onPress={handleBuyCoins}
+              >
+                <LinearGradient
+                  colors={["#FFD700", "#FFA000"]}
+                  style={styles.actionGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Icon name="plus" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Buy Coins</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.coinActionButton}
+                onPress={handleShowHistory}
+              >
+                <LinearGradient
+                  colors={["#7C4DFF", "#FF4D9C"]}
+                  style={styles.actionGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Icon name="history" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>History</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.benefitsContainer}>
+              <Text style={styles.benefitsTitle}>Coin Benefits</Text>
+              <View style={styles.benefitsList}>
+                <View style={styles.benefitItem}>
+                  <Icon name="palette" size={20} color="#7C4DFF" />
+                  <Text style={styles.benefitText}>Custom Avatars</Text>
+                  <Text style={styles.benefitPrice}>500 coins</Text>
+                </View>
+                <View style={styles.benefitItem}>
+                  <Icon name="bullhorn" size={20} color="#7C4DFF" />
+                  <Text style={styles.benefitText}>Public Nudge</Text>
+                  <Text style={styles.benefitPrice}>1000 coins</Text>
+                </View>
               </View>
             </View>
           </LinearGradient>
@@ -349,79 +429,14 @@ export const ProfileScreen = () => {
         </View>
       </Animated.ScrollView>
 
-      <Modal
-        visible={isModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <BlurView intensity={20} style={styles.modalContainer}>
-          <Animated.View
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut.duration(200)}
-            style={[styles.modalContent, modalAnimatedStyle]}
-          >
-            <LinearGradient
-              colors={["rgba(124, 77, 255, 0.2)", "rgba(30, 30, 30, 0.95)"]}
-              style={styles.modalGradient}
-            >
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Choose Your Avatar</Text>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={() => setModalVisible(false)}
-                >
-                  <Icon name="close-circle" size={30} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
+      <AvatarPickerSheet
+        ref={avatarPickerRef}
+        onSelect={handleAvatarSelect}
+        selectedSeed={avatarSeed}
+      />
 
-              {selectedPreviewSeed && (
-                <Animated.View
-                  style={[styles.previewContainer, previewAnimatedStyle]}
-                >
-                  <RandomAvatar seed={selectedPreviewSeed} />
-                  <TouchableOpacity
-                    style={styles.selectButton}
-                    onPress={() => handleAvatarSelect(selectedPreviewSeed)}
-                  >
-                    <Text style={styles.selectButtonText}>Select</Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
-
-              <FlatList
-                data={avatarSeeds}
-                keyExtractor={(item) => item}
-                numColumns={NUM_COLUMNS}
-                contentContainerStyle={styles.avatarList}
-                columnWrapperStyle={styles.columnWrapper}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSelectedPreviewSeed(item);
-                      previewScale.value = withSpring(1.1, {}, () => {
-                        previewScale.value = withSpring(1);
-                      });
-                    }}
-                    style={[
-                      styles.avatarTouchable,
-                      selectedPreviewSeed === item &&
-                        styles.avatarTouchableSelected,
-                    ]}
-                  >
-                    <RandomAvatar seed={item} />
-                    {selectedPreviewSeed === item && (
-                      <View style={styles.selectedOverlay}>
-                        <Icon name="check-circle" size={24} color="#7C4DFF" />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                )}
-              />
-            </LinearGradient>
-          </Animated.View>
-        </BlurView>
-      </Modal>
+      <CoinPurchaseSheet ref={purchaseSheetRef} />
+      <TransactionHistorySheet ref={historySheetRef} />
     </SafeAreaViewCompat>
   );
 };
@@ -693,5 +708,88 @@ const styles = StyleSheet.create({
     color: "#7C4DFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  coinsSection: {
+    margin: 16,
+    marginTop: 24,
+  },
+  coinsContainer: {
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 215, 0, 0.3)",
+  },
+  balanceContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  balanceText: {
+    fontFamily: fonts.bold,
+    fontSize: 42,
+    color: "#FFD700",
+    marginTop: 8,
+  },
+  coinLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
+    marginTop: 4,
+  },
+  coinActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 24,
+  },
+  coinActionButton: {
+    flex: 1,
+    marginHorizontal: 6,
+    borderRadius: 12,
+    overflow: "hidden",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  actionGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  benefitsContainer: {
+    backgroundColor: "rgba(124, 77, 255, 0.1)",
+    borderRadius: 16,
+    padding: 16,
+  },
+  benefitsTitle: {
+    fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  benefitsList: {
+    gap: 12,
+  },
+  benefitItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    padding: 12,
+    borderRadius: 12,
+  },
+  benefitText: {
+    fontFamily: fonts.regular,
+    color: "#FFFFFF",
+    fontSize: 14,
+    marginLeft: 12,
+    flex: 1,
+  },
+  benefitPrice: {
+    fontFamily: fonts.semiBold,
+    color: "#FFD700",
+    fontSize: 14,
   },
 });

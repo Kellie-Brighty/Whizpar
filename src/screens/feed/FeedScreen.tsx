@@ -37,6 +37,10 @@ import Animated, {
 } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
 import { fonts } from "../../theme/fonts";
+import { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { AvatarPickerSheet } from "../../components/sheets/AvatarPickerSheet";
+import { CreatePostSheet } from "../../components/sheets/CreatePostSheet";
+import { LoadingOverlay } from "../../components/common/LoadingOverlay";
 
 // Updated mock data with real images
 const MOCK_POSTS = [
@@ -276,6 +280,7 @@ export const FeedScreen = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("trending");
   const scale = useSharedValue(1);
+  const createPostRef = useRef<BottomSheetModal>(null);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -285,10 +290,25 @@ export const FeedScreen = () => {
     }, 1500);
   }, []);
 
-  const createPost = () => {
-    // Add post creation logic here
-    setIsCreating(false);
-    setNewPost({ content: "", image: null });
+  const createPost = async (content: string, image?: string) => {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      const newPost: FeedItem = {
+        id: Date.now().toString(),
+        username: "Anonymous",
+        content,
+        createdAt: "Just now",
+        type: image ? "image" : "text",
+        imageUrl: image,
+        likes: 0,
+        comments: [],
+      };
+
+      setFeeds((prev) => [newPost, ...prev]);
+    } catch (error) {
+      console.error("Error creating post:", error);
+    }
   };
 
   const pickImage = async () => {
@@ -376,98 +396,31 @@ export const FeedScreen = () => {
     <SafeAreaView style={styles.container} edges={["top", "right", "left"]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
 
-      <Modal
-        visible={isCreating}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        onRequestClose={() => setIsCreating(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setIsCreating(false)}>
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-                style={styles.keyboardView}
-              >
-                <Surface style={styles.createPostContainer}>
-                  <View style={styles.createHeader}>
-                    <Text style={styles.createTitle}>New Post</Text>
-                    <TouchableOpacity onPress={() => setIsCreating(false)}>
-                      <Icon name="close" size={24} color="#6B6B6B" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <TextInput
-                    style={styles.input}
-                    placeholder="What's on your mind?"
-                    placeholderTextColor="#6B6B6B"
-                    multiline
-                    value={newPost.content}
-                    onChangeText={(text) =>
-                      setNewPost((prev) => ({ ...prev, content: text }))
-                    }
-                  />
-
-                  {newPost.image && (
-                    <View style={styles.imagePreviewContainer}>
-                      <Image
-                        source={{ uri: newPost.image }}
-                        style={styles.previewImage}
-                      />
-                      <TouchableOpacity
-                        style={styles.removeImageButton}
-                        onPress={() =>
-                          setNewPost((prev) => ({ ...prev, image: null }))
-                        }
-                      >
-                        <Icon name="close-circle" size={24} color="#FF4081" />
-                      </TouchableOpacity>
-                    </View>
-                  )}
-
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity
-                      style={styles.imageButton}
-                      onPress={pickImage}
-                    >
-                      <Icon name="image-plus" size={24} color="#7C4DFF" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.postButton,
-                        !newPost.content && styles.postButtonDisabled,
-                      ]}
-                      onPress={createPost}
-                      disabled={!newPost.content}
-                    >
-                      <Text style={styles.postButtonText}>Post</Text>
-                    </TouchableOpacity>
-                  </View>
-                </Surface>
-              </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      <CreatePostSheet ref={createPostRef} onPost={createPost} />
 
       <BlurView intensity={20} style={styles.header}>
         <Surface style={styles.headerContent}>
-          <Text style={styles.title}>Whispers</Text>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>Whispers</Text>
+            <Text style={styles.subtitle}>Share your thoughts</Text>
+          </View>
           <TouchableOpacity
-            onPress={() => setIsCreating(true)}
             style={styles.createButton}
+            onPress={() => createPostRef.current?.present()}
           >
-            <View style={styles.createIconContainer}>
-              <Icon name="ghost-outline" size={22} color="#7C4DFF" />
-              <Icon
-                name="plus-circle-outline"
-                size={14}
-                color="#7C4DFF"
-                style={styles.plusIcon}
-              />
-            </View>
+            <LinearGradient
+              colors={["#7C4DFF", "#FF4D9C"]}
+              style={styles.createButtonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Animated.View
+                entering={FadeIn.duration(500)}
+                style={styles.createIconContainer}
+              >
+                <Icon name="pencil-plus" size={24} color="#FFFFFF" />
+              </Animated.View>
+            </LinearGradient>
           </TouchableOpacity>
         </Surface>
         <View style={styles.tabContainer}>
@@ -619,24 +572,22 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   createButton: {
-    transform: [{ scale: 1.1 }],
+    borderRadius: 12,
+    overflow: "hidden",
     elevation: 8,
     shadowColor: "#7C4DFF",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+    transform: [{ scale: 1.1 }],
+  },
+  createButtonGradient: {
+    padding: 12,
+    borderRadius: 12,
   },
   createIconContainer: {
-    position: "relative",
     alignItems: "center",
     justifyContent: "center",
-  },
-  plusIcon: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    backgroundColor: "#2A2A2A",
-    borderRadius: 7,
   },
   loadingContainer: {
     flex: 1,
@@ -649,11 +600,19 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
+  titleContainer: {
+    flex: 1,
+  },
   title: {
     fontFamily: fonts.bold,
     fontSize: 28,
     color: "#FFFFFF",
-    marginBottom: 16,
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.5)",
   },
   tabContainer: {
     flexDirection: "row",

@@ -6,6 +6,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { PostProvider } from "./src/context/PostContext";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import * as Font from "expo-font";
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 export default function App() {
   const [fontsLoaded] = Font.useFonts({
@@ -25,7 +26,9 @@ export default function App() {
         <NavigationContainer>
           <PaperProvider>
             <PostProvider>
-              <RootNavigator />
+              <BottomSheetModalProvider>
+                <RootNavigator />
+              </BottomSheetModalProvider>
             </PostProvider>
           </PaperProvider>
         </NavigationContainer>
