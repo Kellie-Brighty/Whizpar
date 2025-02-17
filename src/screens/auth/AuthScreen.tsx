@@ -35,6 +35,9 @@ import {
 } from "../../components/animations";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RandomAvatar } from "../../components/RandomAvatar";
+import { checkUserLocation } from "../../services/locationService";
+import { RegionRestrictedScreen } from "../region/RegionRestrictedScreen";
+import { SmallLoadingMask } from "../../components/animations/SmallLoadingMask";
 
 const { width, height } = Dimensions.get("window");
 
@@ -56,13 +59,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasBiometrics, setHasBiometrics] = useState(false);
+  const [isLocationChecked, setIsLocationChecked] = useState(false);
+  const [isRegionAllowed, setIsRegionAllowed] = useState(true);
   const formPosition = useSharedValue(0);
   const maskPosition = useSharedValue(0);
+  const maskScale = useSharedValue(1);
   const [selectedAvatar, setSelectedAvatar] = useState<string>("defaultSeed");
 
+  // Separate effect for biometrics
   useEffect(() => {
     checkBiometricAvailability().then(setHasBiometrics);
-    // Load the stored avatar seed if available
+  }, []);
+
+  // Separate effect for avatar
+  useEffect(() => {
     const loadAvatar = async () => {
       const storedAvatar = await AsyncStorage.getItem("@user_avatar");
       if (storedAvatar) {
@@ -70,6 +80,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
       }
     };
     loadAvatar();
+  }, []);
+
+  // Separate effect for location check
+  useEffect(() => {
+    const verifyLocation = async () => {
+      const isAllowed = await checkUserLocation();
+      setIsRegionAllowed(isAllowed);
+      setIsLocationChecked(true);
+    };
+    verifyLocation();
   }, []);
 
   const toggleMode = () => {
@@ -140,13 +160,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
     }
   };
 
+  if (!isLocationChecked) {
+    return <LoadingMask />;
+  }
+
+  if (!isRegionAllowed) {
+    return <RegionRestrictedScreen />;
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
       <View style={styles.header}>
-        <MaskAnimation scale={useSharedValue(1)} rotate={maskPosition} />
+        <MaskAnimation scale={maskScale} rotate={maskPosition} />
         <Animated.View style={[styles.titleContainer, maskAnimatedStyle]}>
           <Text style={styles.title}>Whizpar</Text>
           <View style={styles.avatarContainer}>
@@ -197,9 +225,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
           )}
 
           {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <LoadingMask />
-            </View>
+            <SmallLoadingMask />
           ) : (
             <TouchableOpacity
               style={[styles.button, !username && styles.buttonDisabled]}
