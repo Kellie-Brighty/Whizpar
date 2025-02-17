@@ -36,6 +36,7 @@ import Animated, {
   SlideInRight,
 } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
+import { fonts } from "../../theme/fonts";
 
 // Updated mock data with real images
 const MOCK_POSTS = [
@@ -567,11 +568,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   createTitle: {
+    fontFamily: fonts.bold,
     color: "#FFFFFF",
     fontSize: 18,
-    fontWeight: "600",
   },
   input: {
+    fontFamily: fonts.regular,
     color: "#FFFFFF",
     fontSize: 16,
     minHeight: 100,
@@ -613,8 +615,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#4A4A4A",
   },
   postButtonText: {
+    fontFamily: fonts.semiBold,
     color: "#FFFFFF",
-    fontWeight: "600",
   },
   createButton: {
     transform: [{ scale: 1.1 }],
@@ -648,8 +650,8 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 20,
   },
   title: {
+    fontFamily: fonts.bold,
     fontSize: 28,
-    fontWeight: "700",
     color: "#FFFFFF",
     marginBottom: 16,
   },
@@ -673,9 +675,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(124, 77, 255, 0.1)",
   },
   tabLabel: {
-    color: "#6B6B6B",
+    fontFamily: fonts.semiBold,
     fontSize: 14,
-    fontWeight: "600",
+    color: "#6B6B6B",
   },
   activeTabLabel: {
     color: "#7C4DFF",
@@ -694,6 +696,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   whisperContent: {
+    fontFamily: fonts.regular,
     color: "#FFFFFF",
     fontSize: 16,
     lineHeight: 24,
@@ -714,6 +717,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statText: {
+    fontFamily: fonts.semiBold,
     color: "#7C4DFF",
     fontSize: 14,
   },
@@ -727,9 +731,9 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   impactText: {
+    fontFamily: fonts.bold,
     color: "#FFD700",
     fontSize: 12,
-    fontWeight: "600",
   },
   timeContainer: {
     flexDirection: "row",
@@ -740,6 +744,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   timeText: {
+    fontFamily: fonts.regular,
     color: "#6B6B6B",
     fontSize: 12,
   },

@@ -27,6 +27,7 @@ import {
   GestureHandlerStateChangeNativeEvent,
 } from "react-native-gesture-handler";
 import { Comment } from "../comments/Comment";
+import { fonts } from "../../theme/fonts";
 
 const { width } = Dimensions.get("window");
 
@@ -35,10 +36,16 @@ interface PostProps {
   onPressIn?: () => void;
   onPressOut?: () => void;
   onLike?: () => void;
-  likeAnimatedStyle?: { transform: { scale: number; }[]; };
+  likeAnimatedStyle?: { transform: { scale: number }[] };
 }
 
-export const Post: React.FC<PostProps> = ({ post, onPressIn, onPressOut, onLike, likeAnimatedStyle }) => {
+export const Post: React.FC<PostProps> = ({
+  post,
+  onPressIn,
+  onPressOut,
+  onLike,
+  likeAnimatedStyle,
+}) => {
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const heartScale = useSharedValue(0);
@@ -100,7 +107,14 @@ export const Post: React.FC<PostProps> = ({ post, onPressIn, onPressOut, onLike,
             post.type === "text" && styles.textOnlyContent,
           ]}
         >
-          <Text style={styles.content}>{post.content}</Text>
+          <Text
+            style={[
+              styles.content,
+              post.type === "image" && { marginBottom: 12 },
+            ]}
+          >
+            {post.content}
+          </Text>
           {post.type === "image" && (
             <Image
               source={{ uri: post.imageUrl }}
@@ -239,13 +253,15 @@ const styles = StyleSheet.create({
     borderColor: "#7C4DFF",
   },
   username: {
+    fontFamily: fonts.semiBold,
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "500",
+    marginLeft: 8,
   },
   time: {
+    fontFamily: fonts.regular,
     color: "#6B6B6B",
-    fontSize: 14,
+    fontSize: 12,
   },
   contentContainer: {
     padding: 16,
@@ -259,6 +275,7 @@ const styles = StyleSheet.create({
     borderColor: "#363636",
   },
   content: {
+    fontFamily: fonts.regular,
     color: "#FFFFFF",
     fontSize: 16,
     lineHeight: 24,
@@ -344,13 +361,11 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   commentInput: {
+    fontFamily: fonts.regular,
     color: "#FFFFFF",
     fontSize: 14,
-    minHeight: 40,
-    backgroundColor: "#2A2A2A",
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 8,
+    flex: 1,
+    marginRight: 8,
   },
   commentActions: {
     flexDirection: "row",
@@ -378,5 +393,22 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "500",
+  },
+  commentCount: {
+    fontFamily: fonts.regular,
+    color: "#6B6B6B",
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  likeCount: {
+    fontFamily: fonts.semiBold,
+    color: "#7C4DFF",
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  sendButton: {
+    fontFamily: fonts.semiBold,
+    color: "#7C4DFF",
+    fontSize: 14,
   },
 });

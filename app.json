@@ -21,7 +21,9 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "permissions": ["android.permission.RECORD_AUDIO"],
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "package": "com.kelliebrighty.whizpar"
     },
     "web": {
@@ -34,7 +36,8 @@
           "photosPermission": "Allow Whizpar to access your photos to share images.",
           "cameraPermission": "Allow Whizpar to access your camera to take photos."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

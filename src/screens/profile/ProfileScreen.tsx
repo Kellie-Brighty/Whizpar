@@ -31,6 +31,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RandomAvatar } from "../../components/RandomAvatar";
 import { LinearGradient } from "expo-linear-gradient";
 import MaskedView from "@react-native-masked-view/masked-view";
+import { fonts } from "../../theme/fonts";
 
 const { width, height } = Dimensions.get("window");
 
@@ -461,13 +462,13 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   username: {
+    fontFamily: fonts.bold,
     color: "#FFFFFF",
     fontSize: 24,
-    fontWeight: "600",
-    marginBottom: 8,
   },
   bio: {
-    color: "#6B6B6B",
+    fontFamily: fonts.regular,
+    color: "rgba(255,255,255,0.7)",
     fontSize: 16,
   },
   scrollView: {
@@ -522,10 +523,10 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   sectionTitle: {
+    fontFamily: fonts.semiBold,
     color: "#FFFFFF",
     fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   whisperCard: {
     backgroundColor: "#1E1E1E",
@@ -602,9 +603,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalTitle: {
+    fontFamily: fonts.bold,
     color: "#FFFFFF",
     fontSize: 24,
-    fontWeight: "600",
     textAlign: "center",
   },
   previewContainer: {
@@ -623,9 +624,9 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   selectButtonText: {
+    fontFamily: fonts.semiBold,
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600",
   },
   avatarList: {
     justifyContent: "center",
