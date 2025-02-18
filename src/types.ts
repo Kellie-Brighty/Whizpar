@@ -16,4 +16,14 @@ export interface CommentType {
   createdAt: string;
   likes: number;
   replies: CommentType[];
+}
+
+export interface PublicNudge {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  daysLeft: number;
+  impressions: number;
+  createdAt: string;
 } 

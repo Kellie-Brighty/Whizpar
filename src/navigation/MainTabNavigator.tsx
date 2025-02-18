@@ -1,147 +1,144 @@
-import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { BlurView } from 'expo-blur';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import React from "react";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { BlurView } from "expo-blur";
 import Animated, {
-  useAnimatedStyle,
+  FadeIn,
+  FadeOut,
   withSpring,
-  withTiming,
-  interpolateColor,
-  useSharedValue,
-} from 'react-native-reanimated';
-import { FeedScreen } from '../screens/feed/FeedScreen';
-import { ProfileScreen } from '../screens/profile/ProfileScreen';
+  useAnimatedStyle,
+  withSequence,
+  withDelay,
+} from "react-native-reanimated";
+import { StyleSheet, View, Dimensions, Platform } from "react-native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { FeedScreen } from "../screens/feed/FeedScreen";
+import { ProfileScreen } from "../screens/profile/ProfileScreen";
+import { PublicNudgesScreen } from "../screens/nudges/PublicNudgesScreen";
+import { fonts } from "../theme/fonts";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Tab = createBottomTabNavigator();
-const { width } = Dimensions.get('window');
 
-const CustomTabBar = ({ state, descriptors, navigation }) => {
-  const tabWidth = width / state.routes.length;
-  const activeIndex = useSharedValue(0);
-
-  const indicatorStyle = useAnimatedStyle(() => {
+const AnimatedIcon = ({ name, color, size, focused }) => {
+  const animatedStyle = useAnimatedStyle(() => {
     return {
       transform: [
         {
-          translateX: withSpring(activeIndex.value * tabWidth, {
-            damping: 15,
-            stiffness: 150,
-          }),
+          scale: withSequence(
+            withSpring(focused ? 1.2 : 1),
+            withDelay(150, withSpring(1))
+          ),
         },
       ],
     };
   });
 
   return (
-    <View style={styles.container}>
-      <BlurView intensity={30} style={StyleSheet.absoluteFill} />
-      <Animated.View style={[styles.indicator, indicatorStyle]} />
-      <View style={styles.tabContainer}>
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
-
-          const iconName = 
-            route.name === 'Feed' ? 'home' :
-            route.name === 'Profile' ? 'account' : 'home';
-
-          const AnimatedIcon = Animated.createAnimatedComponent(Icon);
-          const iconScale = useSharedValue(1);
-          const iconRotate = useSharedValue(0);
-
-          const iconStyle = useAnimatedStyle(() => {
-            return {
-              transform: [
-                { scale: iconScale.value },
-                { rotate: `${iconRotate.value}deg` },
-              ],
-            };
-          });
-
-          const handlePress = () => {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-              activeIndex.value = index;
-              iconScale.value = withSpring(1.2, {}, () => {
-                iconScale.value = withSpring(1);
-              });
-              iconRotate.value = withTiming(360, {
-                duration: 500,
-              }, () => {
-                iconRotate.value = 0;
-              });
-            }
-          };
-
-          return (
-            <TouchableOpacity
-              key={route.key}
-              style={styles.tab}
-              onPress={handlePress}
-              activeOpacity={0.7}
-            >
-              <AnimatedIcon
-                name={iconName}
-                size={24}
-                style={[
-                  iconStyle,
-                  { color: isFocused ? '#7C4DFF' : '#6B6B6B' },
-                ]}
-              />
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
+    <Animated.View
+      entering={FadeIn.duration(300)}
+      exiting={FadeOut}
+      style={[animatedStyle, styles.iconContainer]}
+    >
+      <Icon name={name} size={size} color={color} />
+    </Animated.View>
   );
 };
 
 export const MainTabNavigator = () => {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
+        tabBarStyle: {
+          position: "absolute",
+          borderTopWidth: 0,
+          backgroundColor: "transparent",
+          elevation: 0,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom,
+          paddingTop: 8,
+        },
+        tabBarBackground: () => (
+          <BlurView
+            intensity={80}
+            style={[StyleSheet.absoluteFill, styles.tabBarBackground]}
+            tint="dark"
+          >
+            <View style={styles.tabBarOverlay} />
+          </BlurView>
+        ),
+        tabBarActiveTintColor: "#7C4DFF",
+        tabBarInactiveTintColor: "rgba(255, 255, 255, 0.5)",
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontFamily: fonts.semiBold,
+          fontSize: 12,
+          marginTop: 4,
+        },
         headerShown: false,
       }}
     >
-      <Tab.Screen name="Feed" component={FeedScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen
+        name="Feed"
+        component={FeedScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <AnimatedIcon
+              name="home"
+              size={size}
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Nudges"
+        component={PublicNudgesScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <AnimatedIcon
+              name="bullhorn"
+              size={size}
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color, size, focused }) => (
+            <AnimatedIcon
+              name="account"
+              size={size}
+              color={color}
+              focused={focused}
+            />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    height: 70,
-    backgroundColor: 'rgba(30, 30, 30, 0.7)',
-    borderRadius: 35,
-    overflow: 'hidden',
+  tabBarBackground: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: "hidden",
   },
-  tabContainer: {
-    flexDirection: 'row',
-    height: '100%',
+  tabBarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(18, 18, 18, 0.7)",
   },
-  tab: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  indicator: {
-    position: 'absolute',
-    width: width / 2 - 20,
-    height: '100%',
-    backgroundColor: 'rgba(124, 77, 255, 0.1)',
-    borderRadius: 35,
+  iconContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+    height: 40,
   },
 });

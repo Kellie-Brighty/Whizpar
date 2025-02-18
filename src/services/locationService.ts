@@ -15,6 +15,12 @@ const ILE_IFE_COORDINATES = {
   radiusKm: 25, // Increased radius to cover greater Ile-Ife area
 };
 
+// const ILE_IFE_COORDINATES = {
+//   latitude: 6.5244,
+//   longitude: 3.3792,
+//   radiusKm: 25, // Increased radius to cover greater Ile-Ife area
+// };
+
 export const checkUserLocation = async (): Promise<boolean> => {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();

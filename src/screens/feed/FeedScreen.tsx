@@ -365,7 +365,7 @@ export const FeedScreen = () => {
   const tabs = [
     { id: "trending", icon: "trending-up", label: "Trending" },
     { id: "latest", icon: "clock-outline", label: "Latest" },
-    { id: "following", icon: "account-group", label: "Following" },
+    // { id: "following", icon: "account-group", label: "Following" },
   ];
 
   const whispers = [
@@ -717,5 +717,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+    marginHorizontal: 16,
   },
 });

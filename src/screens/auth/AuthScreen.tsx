@@ -88,6 +88,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
       const isAllowed = await checkUserLocation();
       setIsRegionAllowed(isAllowed);
       setIsLocationChecked(true);
+      console.log("isAllowed", isAllowed);
     };
     verifyLocation();
   }, []);

@@ -1,9 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
-import { LinearGradient } from 'expo-linear-gradient';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { fonts } from '../../theme/fonts';
+import React from "react";
+import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
+import { LinearGradient } from "expo-linear-gradient";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { fonts } from "../../theme/fonts";
 
 const COIN_PACKAGES = [
   { coins: 50, price: 1500, popular: false },
@@ -13,8 +13,13 @@ const COIN_PACKAGES = [
   { coins: 2500, price: 45000, popular: false },
 ];
 
-export const CoinPurchaseSheet = React.forwardRef((props, ref) => {
-  const snapPoints = ['70%'];
+interface CoinPurchaseSheetProps {}
+
+export const CoinPurchaseSheet = React.forwardRef<
+  BottomSheetModal,
+  CoinPurchaseSheetProps
+>((_, ref) => {
+  const snapPoints = ["70%"];
 
   const handlePurchase = (coins: number, price: number) => {
     // Handle purchase logic
@@ -37,7 +42,11 @@ export const CoinPurchaseSheet = React.forwardRef((props, ref) => {
               onPress={() => handlePurchase(pkg.coins, pkg.price)}
             >
               <LinearGradient
-                colors={pkg.popular ? ['#7C4DFF', '#FF4D9C'] : ['rgba(124, 77, 255, 0.1)', 'rgba(124, 77, 255, 0.05)']}
+                colors={
+                  pkg.popular
+                    ? ["#7C4DFF", "#FF4D9C"]
+                    : ["rgba(124, 77, 255, 0.1)", "rgba(124, 77, 255, 0.05)"]
+                }
                 style={styles.packageGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -47,19 +56,38 @@ export const CoinPurchaseSheet = React.forwardRef((props, ref) => {
                     <Text style={styles.popularText}>Most Popular</Text>
                   </View>
                 )}
-                
+
                 <View style={styles.coinAmount}>
-                  <Icon name="cash" size={24} color={pkg.popular ? '#FFFFFF' : '#FFD700'} />
-                  <Text style={[styles.coinText, pkg.popular && styles.popularCoinText]}>
+                  <Icon
+                    name="currency-usd"
+                    size={24}
+                    color={pkg.popular ? "#FFFFFF" : "#FFD700"}
+                  />
+                  <Text
+                    style={[
+                      styles.coinText,
+                      pkg.popular && styles.popularCoinText,
+                    ]}
+                  >
                     {pkg.coins} Coins
                   </Text>
                 </View>
 
-                <Text style={[styles.priceText, pkg.popular && styles.popularPriceText]}>
+                <Text
+                  style={[
+                    styles.priceText,
+                    pkg.popular && styles.popularPriceText,
+                  ]}
+                >
                   ₦{pkg.price.toLocaleString()}
                 </Text>
 
-                <Text style={[styles.perCoinText, pkg.popular && styles.popularPerCoinText]}>
+                <Text
+                  style={[
+                    styles.perCoinText,
+                    pkg.popular && styles.popularPerCoinText,
+                  ]}
+                >
                   ₦{(pkg.price / pkg.coins).toFixed(2)} per coin
                 </Text>
               </LinearGradient>
@@ -79,29 +107,29 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#121212',
+    backgroundColor: "#121212",
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 24,
   },
   title: {
     fontFamily: fonts.bold,
     fontSize: 24,
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     marginBottom: 8,
   },
   subtitle: {
     fontFamily: fonts.regular,
     fontSize: 16,
-    color: 'rgba(255,255,255,0.7)',
+    color: "rgba(255,255,255,0.7)",
   },
   packages: {
     gap: 16,
   },
   package: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   popularPackage: {
     transform: [{ scale: 1.02 }],
@@ -112,55 +140,55 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   popularBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 12,
     right: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: "rgba(255,255,255,0.2)",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
   popularText: {
     fontFamily: fonts.semiBold,
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 12,
   },
   coinAmount: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
     marginBottom: 8,
   },
   coinText: {
     fontFamily: fonts.bold,
     fontSize: 24,
-    color: '#FFD700',
+    color: "#FFD700",
   },
   popularCoinText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   priceText: {
     fontFamily: fonts.semiBold,
     fontSize: 20,
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     marginBottom: 4,
   },
   popularPriceText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
   },
   perCoinText: {
     fontFamily: fonts.regular,
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: "rgba(255,255,255,0.5)",
   },
   popularPerCoinText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: "rgba(255,255,255,0.7)",
   },
   secureText: {
     fontFamily: fonts.regular,
     fontSize: 14,
-    color: '#7C4DFF',
-    textAlign: 'center',
+    color: "#7C4DFF",
+    textAlign: "center",
     marginTop: 24,
   },
-}); 
+});

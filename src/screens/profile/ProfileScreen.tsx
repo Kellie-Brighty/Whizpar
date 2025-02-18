@@ -25,8 +25,9 @@ import Animated, {
 } from "react-native-reanimated";
 import { BlurView } from "expo-blur";
 import { useNavigation } from "@react-navigation/native";
+import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../../navigation/types";
+import { MainTabParamList, RootStackParamList } from "../../navigation/types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RandomAvatar } from "../../components/RandomAvatar";
 import { LinearGradient } from "expo-linear-gradient";
@@ -36,6 +37,11 @@ import { CoinPurchaseSheet } from "../../components/sheets/CoinPurchaseSheet";
 import { TransactionHistorySheet } from "../../components/sheets/TransactionHistorySheet";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { AvatarPickerSheet } from "../../components/sheets/AvatarPickerSheet";
+import { PublicNudgeSheet } from "../../components/sheets/PublicNudgeSheet";
+import { eventEmitter } from "../../utils/EventEmitter";
+import { PublicNudge } from "../../types";
+import Toast from "react-native-toast-message";
+import { CompositeNavigationProp } from "@react-navigation/native";
 
 const { width, height } = Dimensions.get("window");
 
@@ -55,8 +61,10 @@ const MODAL_WIDTH = Math.min(
 const WHIZPAR_ABOUT_URL = "https://whizpar.com/about";
 const GRADIENT_COLORS = ["#7C4DFF", "#FF4D9C"] as const;
 
-type ProfileScreenNavigationProp =
-  NativeStackNavigationProp<RootStackParamList>;
+type ProfileScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export const ProfileScreen = () => {
   const scrollY = useSharedValue(0);
@@ -167,6 +175,7 @@ export const ProfileScreen = () => {
   );
   const modalScale = useSharedValue(0.8);
   const previewScale = useSharedValue(1);
+  const [hasActiveNudges, setHasActiveNudges] = useState(false);
 
   const modalAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: modalScale.value }],
@@ -179,6 +188,7 @@ export const ProfileScreen = () => {
   const purchaseSheetRef = useRef<BottomSheetModal>(null);
   const historySheetRef = useRef<BottomSheetModal>(null);
   const avatarPickerRef = useRef<BottomSheetModal>(null);
+  const publicNudgeRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
     const loadAvatar = async () => {
@@ -209,7 +219,9 @@ export const ProfileScreen = () => {
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem("@auth_token");
-      navigation.reset({
+      (
+        navigation as any as NativeStackNavigationProp<RootStackParamList>
+      ).reset({
         index: 0,
         routes: [{ name: "Auth" }],
       });
@@ -224,6 +236,36 @@ export const ProfileScreen = () => {
 
   const handleShowHistory = () => {
     historySheetRef.current?.present();
+  };
+
+  const handleCreateNudge = async (data: {
+    title: string;
+    description: string;
+    image?: string;
+    duration: number;
+  }) => {
+    try {
+      const newNudge: PublicNudge = {
+        id: Date.now().toString(),
+        title: data.title,
+        description: data.description,
+        imageUrl: data.image,
+        daysLeft: data.duration,
+        impressions: 0,
+        createdAt: new Date().toISOString(),
+      };
+
+      eventEmitter.emit("newNudge", newNudge);
+      setHasActiveNudges(true);
+
+      Toast.show({
+        type: "success",
+        text1: "Nudge Created",
+        text2: "Your promotion is now live!",
+      });
+    } catch (error) {
+      console.error("Error creating nudge:", error);
+    }
   };
 
   return (
@@ -293,8 +335,10 @@ export const ProfileScreen = () => {
               entering={FadeIn.duration(500)}
               style={styles.balanceContainer}
             >
-              <Icon name="cash" size={32} color="#FFD700" />
-              <Text style={styles.balanceText}>1,250</Text>
+              <View style={styles.innerBalanceContainer}>
+                <Icon name="currency-usd" size={50} color="#FFD700" />
+                <Text style={styles.balanceText}>1,250</Text>
+              </View>
               <Text style={styles.coinLabel}>Whizpar Coins</Text>
             </Animated.View>
 
@@ -341,10 +385,32 @@ export const ProfileScreen = () => {
                 <View style={styles.benefitItem}>
                   <Icon name="bullhorn" size={20} color="#7C4DFF" />
                   <Text style={styles.benefitText}>Public Nudge</Text>
-                  <Text style={styles.benefitPrice}>1000 coins</Text>
+                  <TouchableOpacity
+                    onPress={() => publicNudgeRef.current?.present()}
+                    style={styles.createNudgeButton}
+                  >
+                    <Text style={styles.createNudgeText}>Create</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
+
+            {hasActiveNudges && (
+              <TouchableOpacity
+                style={styles.viewNudgesButton}
+                onPress={() => navigation.navigate("Nudges")}
+              >
+                <LinearGradient
+                  colors={["#7C4DFF", "#FF4D9C"]}
+                  style={styles.viewNudgesGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Icon name="bullhorn" size={20} color="#FFFFFF" />
+                  <Text style={styles.viewNudgesText}>View My Promotions</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </LinearGradient>
         </View>
 
@@ -437,6 +503,11 @@ export const ProfileScreen = () => {
 
       <CoinPurchaseSheet ref={purchaseSheetRef} />
       <TransactionHistorySheet ref={historySheetRef} />
+      <PublicNudgeSheet
+        ref={publicNudgeRef}
+        availableCoins={1250}
+        onSubmit={handleCreateNudge}
+      />
     </SafeAreaViewCompat>
   );
 };
@@ -727,7 +798,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 42,
     color: "#FFD700",
-    marginTop: 8,
   },
   coinLabel: {
     fontFamily: fonts.semiBold,
@@ -790,6 +860,39 @@ const styles = StyleSheet.create({
   benefitPrice: {
     fontFamily: fonts.semiBold,
     color: "#FFD700",
+    fontSize: 14,
+  },
+  createNudgeButton: {
+    backgroundColor: "#7C4DFF",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  createNudgeText: {
+    fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  innerBalanceContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewNudgesButton: {
+    marginTop: 16,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  viewNudgesGradient: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    gap: 8,
+  },
+  viewNudgesText: {
+    fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
     fontSize: 14,
   },
 });

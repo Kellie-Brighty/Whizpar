@@ -6,5 +6,6 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Feed: undefined;
+  Nudges: undefined;
   Profile: undefined;
 };
