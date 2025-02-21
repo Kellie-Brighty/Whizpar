@@ -38,12 +38,13 @@ import { RandomAvatar } from "../../components/RandomAvatar";
 import { checkUserLocation } from "../../services/locationService";
 import { RegionRestrictedScreen } from "../region/RegionRestrictedScreen";
 import { SmallLoadingMask } from "../../components/animations/SmallLoadingMask";
+import { authService } from "../../services/authService";
+import { useNavigation } from "@react-navigation/native";
+import { supabase } from "../../lib/supabase";
 
 const { width, height } = Dimensions.get("window");
 
-interface AuthScreenProps {
-  navigation: NativeStackNavigationProp<RootStackParamList, "Auth">;
-}
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface MaskAnimationProps {
   scale?: SharedValue<number>;
@@ -52,9 +53,10 @@ interface MaskAnimationProps {
   size?: number;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
+export const AuthScreen = () => {
+  const navigation = useNavigation<NavigationProp>();
   const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,17 +71,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
   // Separate effect for biometrics
   useEffect(() => {
     checkBiometricAvailability().then(setHasBiometrics);
-  }, []);
-
-  // Separate effect for avatar
-  useEffect(() => {
-    const loadAvatar = async () => {
-      const storedAvatar = await AsyncStorage.getItem("@user_avatar");
-      if (storedAvatar) {
-        setSelectedAvatar(storedAvatar);
-      }
-    };
-    loadAvatar();
   }, []);
 
   // Separate effect for location check
@@ -123,41 +114,41 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
     };
   });
 
-  const handleLogin = async () => {
+  const handleAuth = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      if (!username.trim() || !password.trim()) {
+      if (!email.trim() || !password.trim()) {
         throw new Error("Please fill in all fields");
       }
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      if (hasBiometrics) {
-        const authenticated = await authenticateWithBiometrics();
-        if (!authenticated) {
-          throw new Error("Biometric authentication failed");
-        }
+      if (authError) throw authError;
+
+      if (authData.user) {
+        console.log("Sign in successful:", authData.user.id);
+        // Let AuthContext handle the navigation
       }
-
-      // Set auth token
-      await AsyncStorage.setItem("@auth_token", "dummy_token");
-
-      // Navigate to Main screen
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "Main" }],
-      });
     } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("An unknown error occurred");
-      }
+      setError(err instanceof Error ? err.message : "An error occurred");
+      console.error("Auth error:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const clearStorage = async () => {
+    try {
+      await AsyncStorage.clear();
+      console.log("Storage cleared successfully");
+    } catch (e) {
+      console.error("Error clearing storage:", e);
     }
   };
 
@@ -179,7 +170,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
         <Animated.View style={[styles.titleContainer, maskAnimatedStyle]}>
           <Text style={styles.title}>Whizpar</Text>
           <View style={styles.avatarContainer}>
-            <RandomAvatar seed={selectedAvatar} />
+            <RandomAvatar seed={selectedAvatar} size={120} />
           </View>
           <Text style={styles.subtitle}>
             {isLogin ? "Welcome back, stranger" : "Join anonymously"}
@@ -192,14 +183,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
       <Animated.View style={[styles.formContainer, formAnimatedStyle]}>
         <Surface style={styles.form}>
           <View style={styles.inputContainer}>
-            <Icon name="incognito" size={20} color="#7C4DFF" />
+            <Icon name="email" size={20} color="#7C4DFF" />
             <TextInput
               style={styles.input}
-              placeholder="Anonymous ID"
+              placeholder="Email"
               placeholderTextColor="#6B6B6B"
-              value={username}
-              onChangeText={setUsername}
+              value={email}
+              onChangeText={setEmail}
               autoCapitalize="none"
+              keyboardType="email-address"
             />
           </View>
 
@@ -229,9 +221,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
             <SmallLoadingMask />
           ) : (
             <TouchableOpacity
-              style={[styles.button, !username && styles.buttonDisabled]}
-              onPress={handleLogin}
-              disabled={!username}
+              style={[styles.button, !email && styles.buttonDisabled]}
+              onPress={handleAuth}
+              // disabled={!email}
             >
               <Text style={styles.buttonText}>
                 {isLogin ? "Enter" : "Create Account"}
@@ -246,6 +238,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ navigation }) => {
                 : "Already have an identity?"}
             </Text>
           </TouchableOpacity>
+
+          <Text style={styles.privacyNote}>
+            Your email is only used for authentication and will never be shown
+            publicly. You'll get a random anonymous identity after signing in.
+          </Text>
+
+          {/* <TouchableOpacity onPress={clearStorage}>
+            <Text>Clear Storage</Text>
+          </TouchableOpacity> */}
         </Surface>
       </Animated.View>
     </KeyboardAvoidingView>
@@ -361,6 +362,12 @@ const styles = StyleSheet.create({
   },
   changeAvatarText: {
     color: "#7C4DFF",
+    marginTop: 10,
+  },
+  privacyNote: {
+    color: "#6B6B6B",
+    fontSize: 12,
+    textAlign: "center",
     marginTop: 10,
   },
 });

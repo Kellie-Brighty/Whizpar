@@ -1,7 +1,8 @@
 export type RootStackParamList = {
   Onboarding: undefined;
   Auth: undefined;
-  Main: undefined;
+  CreateProfile: undefined;
+  MainTab: undefined;
 };
 
 export type MainTabParamList = {

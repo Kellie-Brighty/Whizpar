@@ -6,9 +6,10 @@ const AVATAR_API_URL = "https://api.dicebear.com/9.x/lorelei/svg";
 
 interface RandomAvatarProps {
   seed: string;
+  size?: number;
 }
 
-export const RandomAvatar: React.FC<RandomAvatarProps> = ({ seed }) => {
+export const RandomAvatar: React.FC<RandomAvatarProps> = ({ seed, size = 80 }) => {
   const [svgContent, setSvgContent] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export const RandomAvatar: React.FC<RandomAvatarProps> = ({ seed }) => {
 
   return (
     <View style={styles.container}>
-      {svgContent && <SvgXml xml={svgContent} width="100" height="100" />}
+      {svgContent && <SvgXml xml={svgContent} width={size} height={size} />}
     </View>
   );
 };

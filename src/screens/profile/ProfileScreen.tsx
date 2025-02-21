@@ -42,6 +42,7 @@ import { eventEmitter } from "../../utils/EventEmitter";
 import { PublicNudge } from "../../types";
 import Toast from "react-native-toast-message";
 import { CompositeNavigationProp } from "@react-navigation/native";
+import { useAuth } from "../../contexts/AuthContext";
 
 const { width, height } = Dimensions.get("window");
 
@@ -190,6 +191,12 @@ export const ProfileScreen = () => {
   const avatarPickerRef = useRef<BottomSheetModal>(null);
   const publicNudgeRef = useRef<BottomSheetModal>(null);
 
+  const { profile, signOut } = useAuth();
+
+  useEffect(() => {
+    console.log("Current profile data in ProfileScreen:", profile);
+  }, [profile]);
+
   useEffect(() => {
     const loadAvatar = async () => {
       const storedAvatar = await AsyncStorage.getItem("@user_avatar");
@@ -217,17 +224,7 @@ export const ProfileScreen = () => {
   );
 
   const handleLogout = async () => {
-    try {
-      await AsyncStorage.removeItem("@auth_token");
-      (
-        navigation as any as NativeStackNavigationProp<RootStackParamList>
-      ).reset({
-        index: 0,
-        routes: [{ name: "Auth" }],
-      });
-    } catch (error) {
-      console.error("Error logging out:", error);
-    }
+    await signOut();
   };
 
   const handleBuyCoins = () => {
@@ -277,7 +274,7 @@ export const ProfileScreen = () => {
         <BlurView intensity={40} style={StyleSheet.absoluteFill} />
         <Animated.View style={[styles.headerContent, headerContentStyle]}>
           <View style={styles.avatarWrapper}>
-            <RandomAvatar seed={avatarSeed} />
+            <RandomAvatar seed={profile?.avatar_seed || "default"} size={120} />
             <TouchableOpacity
               style={styles.editIcon}
               onPress={() => avatarPickerRef.current?.present()}
@@ -285,7 +282,7 @@ export const ProfileScreen = () => {
               <Icon name="pencil" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.username}>Anonymous</Text>
+          <Text style={styles.username}>{profile?.username}</Text>
           <Text style={styles.bio}>Whispering thoughts into the void</Text>
         </Animated.View>
       </Animated.View>
@@ -337,7 +334,7 @@ export const ProfileScreen = () => {
             >
               <View style={styles.innerBalanceContainer}>
                 <Icon name="currency-usd" size={50} color="#FFD700" />
-                <Text style={styles.balanceText}>1,250</Text>
+                <Text style={styles.balanceText}>{profile?.coins}</Text>
               </View>
               <Text style={styles.coinLabel}>Whizpar Coins</Text>
             </Animated.View>

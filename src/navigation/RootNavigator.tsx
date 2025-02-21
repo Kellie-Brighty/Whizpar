@@ -4,58 +4,49 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { OnboardingScreen } from "../screens/onboarding/OnboardingScreen";
 import { AuthScreen } from "../screens/auth/AuthScreen";
 import { MainTabNavigator } from "./MainTabNavigator";
+import { useAuth } from "../contexts/AuthContext";
 import { RootStackParamList } from "./types";
+import { CreateProfileScreen } from "../screens/profile/CreateProfileScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
-  const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, profile, loading } = useAuth();
+  const [isFirstLaunch, setIsFirstLaunch] = useState(false);
 
   useEffect(() => {
-    checkInitialState();
+    AsyncStorage.getItem("@onboarding_complete").then((value) => {
+      setIsFirstLaunch(value === null);
+    });
   }, []);
 
-  const checkInitialState = async () => {
-    try {
-      const [hasSeenOnboarding, authToken] = await Promise.all([
-        AsyncStorage.getItem("@onboarding_complete"),
-        AsyncStorage.getItem("@auth_token"),
-      ]);
-
-      setIsFirstLaunch(hasSeenOnboarding === null);
-      setIsAuthenticated(authToken !== null);
-    } catch (error) {
-      console.error("Error checking initial state:", error);
-      setIsFirstLaunch(true);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (isLoading) {
-    return null; // Or a loading screen
+  if (loading) {
+    return null;
   }
 
+  console.log("RootNavigator state:", {
+    user: !!user,
+    hasProfile: !!profile,
+    isFirstLaunch,
+    profileData: profile,
+  });
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!isAuthenticated ? (
-        // Not authenticated flow
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName={user ? (profile ? "MainTab" : "CreateProfile") : "Auth"}
+    >
+      {!user ? (
         <>
           {isFirstLaunch && (
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           )}
           <Stack.Screen name="Auth" component={AuthScreen} />
-          <Stack.Screen name="Main" component={MainTabNavigator} />
         </>
+      ) : !profile ? (
+        <Stack.Screen name="CreateProfile" component={CreateProfileScreen} />
       ) : (
-        // Authenticated flow
-        <>
-          <Stack.Screen name="Main" component={MainTabNavigator} />
-          <Stack.Screen name="Auth" component={AuthScreen} />
-        </>
+        <Stack.Screen name="MainTab" component={MainTabNavigator} />
       )}
     </Stack.Navigator>
   );

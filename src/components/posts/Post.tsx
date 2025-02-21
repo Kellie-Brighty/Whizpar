@@ -94,7 +94,7 @@ export const Post: React.FC<PostProps> = ({
           <View style={styles.anonymousAvatar}>
             <Icon name="incognito" size={20} color="#7C4DFF" />
           </View>
-          <Text style={styles.username}>{post.username}</Text>
+        <Text style={styles.username}>{post.username}</Text>
         </View>
         <Text style={styles.time}>{post.createdAt}</Text>
       </View>
@@ -212,7 +212,7 @@ export const Post: React.FC<PostProps> = ({
               <Comment key={comment.id} comment={comment} />
             ))}
           </ScrollView>
-        </View>
+    </View>
       )}
     </Surface>
   );

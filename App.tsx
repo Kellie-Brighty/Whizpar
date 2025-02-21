@@ -8,6 +8,7 @@ import { RootNavigator } from "./src/navigation/RootNavigator";
 import * as Font from "expo-font";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import Toast from "react-native-toast-message";
+import { AuthProvider } from "./src/contexts/AuthContext";
 
 export default function App() {
   const [fontsLoaded] = Font.useFonts({
@@ -25,13 +26,15 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <NavigationContainer>
-          <PaperProvider>
-            <PostProvider>
-              <BottomSheetModalProvider>
-                <RootNavigator />
-              </BottomSheetModalProvider>
-            </PostProvider>
-          </PaperProvider>
+          <AuthProvider>
+            <PaperProvider>
+              <PostProvider>
+                <BottomSheetModalProvider>
+                  <RootNavigator />
+                </BottomSheetModalProvider>
+              </PostProvider>
+            </PaperProvider>
+          </AuthProvider>
         </NavigationContainer>
         <Toast />
       </SafeAreaProvider>
