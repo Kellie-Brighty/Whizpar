@@ -43,6 +43,7 @@ import { PublicNudge } from "../../types";
 import Toast from "react-native-toast-message";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { useAuth } from "../../contexts/AuthContext";
+import { supabase } from "../../lib/supabase";
 
 const { width, height } = Dimensions.get("window");
 
@@ -191,7 +192,7 @@ export const ProfileScreen = () => {
   const avatarPickerRef = useRef<BottomSheetModal>(null);
   const publicNudgeRef = useRef<BottomSheetModal>(null);
 
-  const { profile, signOut } = useAuth();
+  const { profile, setProfile, signOut } = useAuth();
 
   useEffect(() => {
     console.log("Current profile data in ProfileScreen:", profile);
@@ -211,11 +212,42 @@ export const ProfileScreen = () => {
   const handleAvatarSelect = async (seed: string) => {
     try {
       console.log("Selected Avatar Seed:", seed);
-      setAvatarSeed(seed);
-      await AsyncStorage.setItem("@user_avatar", seed);
-      setModalVisible(false);
+
+      // Update avatar in database
+      const { data, error } = await supabase
+        .from("profiles")
+        .update({ avatar_seed: seed })
+        .eq("id", profile?.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local states
+      if (data) {
+        setAvatarSeed(seed);
+        setProfile(data);
+        await AsyncStorage.setItem("@user_avatar", seed);
+        setModalVisible(false);
+
+        Toast.show({
+          type: "success",
+          text1: "Avatar Updated",
+          text2: "Your new identity is ready!",
+        });
+
+        console.log("Avatar updated:", {
+          userId: profile?.id,
+          newSeed: seed,
+        });
+      }
     } catch (error) {
-      console.error("Error storing avatar:", error);
+      console.error("Error updating avatar:", error);
+      Toast.show({
+        type: "error",
+        text1: "Update Failed",
+        text2: "Could not update your avatar",
+      });
     }
   };
 
@@ -891,5 +923,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semiBold,
     color: "#FFFFFF",
     fontSize: 14,
+  },
+  changeAvatarText: {
+    fontFamily: fonts.regular,
+    color: "#FFFFFF",
+    fontSize: 16,
   },
 });

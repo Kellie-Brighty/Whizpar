@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { authService } from "../services/authService";
-import { User } from "@supabase/supabase-js";
+import { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -22,6 +22,7 @@ type AuthContextType = {
     avatarSeed: string
   ) => Promise<Profile | null>;
   signOut: () => Promise<void>;
+  setProfile: React.Dispatch<React.SetStateAction<Profile | null>>;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -31,6 +32,7 @@ const AuthContext = createContext<AuthContextType>({
   checkProfile: async () => null,
   createProfile: async () => null,
   signOut: async () => {},
+  setProfile: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -44,12 +46,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const checkProfile = async () => {
     if (!user) {
-      console.log("No user to check profile for");
+      console.log("checkProfile: No user to check profile for");
       return null;
     }
 
     try {
-      console.log("Checking profile for user:", user.id);
+      console.log("checkProfile: Checking profile for user:", user.id);
 
       const { data, error } = await supabase
         .from("profiles")
@@ -57,16 +59,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         .eq("id", user.id)
         .single();
 
-      console.log("Profile check response:", {
+      console.log("checkProfile: Database response:", {
         data,
-        errorCode: error?.code,
-        errorMessage: error?.message,
+        error: error ? { code: error.code, message: error.message } : null,
         userId: user.id,
       });
 
       if (error) {
         if (error.code === "PGRST116") {
-          console.log("No profile found for user:", user.id);
+          console.log("checkProfile: No profile found for user:", user.id);
           setProfile(null);
           return null;
         }
@@ -74,20 +75,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       if (data) {
-        console.log("Profile found:", {
+        console.log("checkProfile: Profile found and set:", {
           userId: user.id,
           username: data.username,
-          hasAvatar: !!data.avatar_seed,
         });
         setProfile(data);
         return data;
       }
 
-      console.log("No profile data returned for user:", user.id);
+      console.log("checkProfile: No data returned for user:", user.id);
       setProfile(null);
       return null;
     } catch (error) {
-      console.error("Error checking profile:", error);
+      console.error("checkProfile: Error checking profile:", error);
       setProfile(null);
       return null;
     }
@@ -134,35 +134,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth state changed:", {
-        event,
-        hasUser: !!session?.user,
-        userId: session?.user?.id,
-      });
-      if (!mounted) return;
+    } = supabase.auth.onAuthStateChange(
+      async (event: AuthChangeEvent, session: Session | null) => {
+        console.log("Auth state changed:", {
+          event,
+          hasUser: !!session?.user,
+          userId: session?.user?.id,
+        });
 
-      try {
-        if (session?.user) {
-          setUser(session.user);
-          const profileData = await checkProfile();
-          console.log("Auth state update complete:", {
-            hasUser: true,
-            hasProfile: !!profileData,
-            event,
-            userId: session.user.id,
-          });
-        } else {
-          setUser(null);
-          setProfile(null);
-          console.log("Auth state cleared");
+        if (!mounted) return;
+
+        try {
+          if (session?.user) {
+            setUser(session.user);
+            const profileData = await checkProfile();
+            console.log("Auth state update complete:", {
+              hasUser: true,
+              hasProfile: !!profileData,
+              event,
+              userId: session.user.id,
+              profileUsername: profileData?.username,
+            });
+          } else {
+            setUser(null);
+            setProfile(null);
+            console.log("Auth state cleared");
+          }
+        } catch (error) {
+          console.error("Error in auth state change:", error);
+        } finally {
+          if (mounted) setLoading(false);
         }
-      } catch (error) {
-        console.error("Error in auth state change:", error);
-      } finally {
-        if (mounted) setLoading(false);
       }
-    });
+    );
 
     // Initial check
     const initAuth = async () => {
@@ -205,6 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         checkProfile,
         createProfile,
         signOut: handleSignOut,
+        setProfile,
       }}
     >
       {children}

@@ -48,9 +48,14 @@ export const CreateProfileScreen = () => {
       if (!result) {
         throw new Error("Failed to create profile");
       }
-      // navigation.navigate("MainTab");
+      console.log("Profile created successfully:", {
+        username,
+        userId: result.id,
+      });
+      // AuthContext will handle navigation to MainTab
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
+      console.error("Profile creation error:", err);
     } finally {
       setLoading(false);
     }

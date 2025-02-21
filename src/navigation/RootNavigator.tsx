@@ -24,29 +24,31 @@ export const RootNavigator = () => {
     return null;
   }
 
-  console.log("RootNavigator state:", {
+  console.log("RootNavigator navigation state:", {
     user: !!user,
     hasProfile: !!profile,
     isFirstLaunch,
     profileData: profile,
+    shouldShowMainTab: !!user && !!profile,
+    shouldShowCreateProfile: !!user && !profile,
   });
 
   return (
-    <Stack.Navigator
-      screenOptions={{ headerShown: false }}
-      initialRouteName={user ? (profile ? "MainTab" : "CreateProfile") : "Auth"}
-    >
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
+        // Not authenticated flow
         <>
           {isFirstLaunch && (
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           )}
           <Stack.Screen name="Auth" component={AuthScreen} />
         </>
-      ) : !profile ? (
-        <Stack.Screen name="CreateProfile" component={CreateProfileScreen} />
-      ) : (
+      ) : profile ? (
+        // Has profile - show main app
         <Stack.Screen name="MainTab" component={MainTabNavigator} />
+      ) : (
+        // No profile - show create profile
+        <Stack.Screen name="CreateProfile" component={CreateProfileScreen} />
       )}
     </Stack.Navigator>
   );

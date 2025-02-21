@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  ScrollView,
 } from "react-native";
 import { Surface } from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -41,6 +42,7 @@ import { SmallLoadingMask } from "../../components/animations/SmallLoadingMask";
 import { authService } from "../../services/authService";
 import { useNavigation } from "@react-navigation/native";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../contexts/AuthContext";
 
 const { width, height } = Dimensions.get("window");
 
@@ -67,6 +69,7 @@ export const AuthScreen = () => {
   const maskPosition = useSharedValue(0);
   const maskScale = useSharedValue(1);
   const [selectedAvatar, setSelectedAvatar] = useState<string>("defaultSeed");
+  const { setProfile } = useAuth();
 
   // Separate effect for biometrics
   useEffect(() => {
@@ -123,17 +126,83 @@ export const AuthScreen = () => {
         throw new Error("Please fill in all fields");
       }
 
-      const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
+      if (isLogin) {
+        // Login flow
+        const { data: authData, error: authError } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+        if (authError) throw authError;
+
+        if (authData.user) {
+          console.log("Sign in successful:", authData.user.id);
+
+          // Wait for auth state to be set
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Now check profile
+          const { data: profileData, error: profileError } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", authData.user.id)
+            .single();
+
+          if (profileError && profileError.code !== "PGRST116") {
+            throw profileError;
+          }
+
+          console.log("Direct profile check:", {
+            userId: authData.user.id,
+            hasProfile: !!profileData,
+            profileData,
+          });
+
+          // Set the profile in AuthContext
+          if (profileData) {
+            setProfile(profileData);
+          }
+        }
+      } else {
+        // Signup flow
+        const { error: checkError } = await supabase.auth.signInWithPassword({
           email,
-          password,
+          password: "dummy-password-for-check",
         });
 
-      if (authError) throw authError;
+        if (
+          !checkError ||
+          !checkError.message.includes("Invalid login credentials")
+        ) {
+          throw new Error("Email already exists. Please sign in instead.");
+        }
 
-      if (authData.user) {
-        console.log("Sign in successful:", authData.user.id);
-        // Let AuthContext handle the navigation
+        // If email doesn't exist, proceed with signup
+        const { data: signUpData, error: signUpError } =
+          await supabase.auth.signUp({
+            email,
+            password,
+          });
+
+        if (signUpError) throw signUpError;
+
+        if (signUpData.user) {
+          console.log("Sign up successful:", {
+            userId: signUpData.user.id,
+            email: signUpData.user.email,
+          });
+
+          // Clear form
+          setEmail("");
+          setPassword("");
+          setIsLogin(true); // Switch to login mode
+
+          // Show success message
+          setError(
+            "Please check your email for verification link, then sign in."
+          );
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -161,95 +230,107 @@ export const AuthScreen = () => {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
-    >
-      <View style={styles.header}>
-        <MaskAnimation scale={maskScale} rotate={maskPosition} />
-        <Animated.View style={[styles.titleContainer, maskAnimatedStyle]}>
-          <Text style={styles.title}>Whizpar</Text>
-          <View style={styles.avatarContainer}>
-            <RandomAvatar seed={selectedAvatar} size={120} />
-          </View>
-          <Text style={styles.subtitle}>
-            {isLogin ? "Welcome back, stranger" : "Join anonymously"}
-          </Text>
-        </Animated.View>
-      </View>
-
-      {error && <ErrorMask message={error} />}
-
-      <Animated.View style={[styles.formContainer, formAnimatedStyle]}>
-        <Surface style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Icon name="email" size={20} color="#7C4DFF" />
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#6B6B6B"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Icon name="lock" size={20} color="#7C4DFF" />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#6B6B6B"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          </View>
-
-          {hasBiometrics && (
-            <TouchableOpacity
-              style={styles.biometricButton}
-              onPress={() => authenticateWithBiometrics()}
-            >
-              <Icon name="fingerprint" size={24} color="#7C4DFF" />
-              <Text style={styles.biometricText}>Use biometrics</Text>
-            </TouchableOpacity>
-          )}
-
-          {isLoading ? (
-            <SmallLoadingMask />
-          ) : (
-            <TouchableOpacity
-              style={[styles.button, !email && styles.buttonDisabled]}
-              onPress={handleAuth}
-              // disabled={!email}
-            >
-              <Text style={styles.buttonText}>
-                {isLogin ? "Enter" : "Create Account"}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <MaskAnimation scale={maskScale} rotate={maskPosition} />
+            <Animated.View style={[styles.titleContainer, maskAnimatedStyle]}>
+              <Text style={styles.title}>Whizpar</Text>
+              <View style={styles.avatarContainer}>
+                <RandomAvatar seed={selectedAvatar} size={120} />
+              </View>
+              <Text style={styles.subtitle}>
+                {isLogin ? "Welcome back, stranger" : "Join anonymously"}
               </Text>
-            </TouchableOpacity>
-          )}
+            </Animated.View>
+          </View>
 
-          <TouchableOpacity style={styles.toggleButton} onPress={toggleMode}>
-            <Text style={styles.toggleText}>
-              {isLogin
-                ? "Need an anonymous identity?"
-                : "Already have an identity?"}
-            </Text>
-          </TouchableOpacity>
+          {error && <ErrorMask message={error} />}
 
-          <Text style={styles.privacyNote}>
-            Your email is only used for authentication and will never be shown
-            publicly. You'll get a random anonymous identity after signing in.
-          </Text>
+          <Animated.View style={[styles.formContainer, formAnimatedStyle]}>
+            <Surface style={styles.form}>
+              <View style={styles.inputContainer}>
+                <Icon name="email" size={20} color="#7C4DFF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor="#6B6B6B"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
 
-          {/* <TouchableOpacity onPress={clearStorage}>
-            <Text>Clear Storage</Text>
-          </TouchableOpacity> */}
-        </Surface>
-      </Animated.View>
-    </KeyboardAvoidingView>
+              <View style={styles.inputContainer}>
+                <Icon name="lock" size={20} color="#7C4DFF" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#6B6B6B"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
+
+              {hasBiometrics && (
+                <TouchableOpacity
+                  style={styles.biometricButton}
+                  onPress={() => authenticateWithBiometrics()}
+                >
+                  <Icon name="fingerprint" size={24} color="#7C4DFF" />
+                  <Text style={styles.biometricText}>Use biometrics</Text>
+                </TouchableOpacity>
+              )}
+
+              {isLoading ? (
+                <SmallLoadingMask />
+              ) : (
+                <TouchableOpacity
+                  style={[styles.button, !email && styles.buttonDisabled]}
+                  onPress={handleAuth}
+                  // disabled={!email}
+                >
+                  <Text style={styles.buttonText}>
+                    {isLogin ? "Enter" : "Create Account"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.toggleButton}
+                onPress={toggleMode}
+              >
+                <Text style={styles.toggleText}>
+                  {isLogin
+                    ? "Need an anonymous identity?"
+                    : "Already have an identity?"}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.privacyNote}>
+                Your email is only used for authentication and will never be
+                shown publicly. You'll get a random anonymous identity after
+                signing in.
+              </Text>
+
+              {/* <TouchableOpacity onPress={clearStorage}>
+                <Text>Clear Storage</Text>
+              </TouchableOpacity> */}
+            </Surface>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
@@ -257,6 +338,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
     height: height * 0.45,
