@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   TextInput,
   Keyboard,
 } from "react-native";
-import { PostType } from "../../types";
+import { Post as PostType, postService } from "../../services/postService";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { Surface } from "react-native-paper";
 import Animated, {
@@ -28,6 +28,10 @@ import {
 } from "react-native-gesture-handler";
 import { Comment } from "../comments/Comment";
 import { fonts } from "../../theme/fonts";
+import { formatTimeAgo } from "../../utils/formatTimeAgo";
+import { RandomAvatar } from "../RandomAvatar";
+import { LinearGradient } from "expo-linear-gradient";
+import { supabase } from "../../lib/supabase";
 
 const { width } = Dimensions.get("window");
 
@@ -36,7 +40,8 @@ interface PostProps {
   onPressIn?: () => void;
   onPressOut?: () => void;
   onLike?: () => void;
-  likeAnimatedStyle?: { transform: { scale: number }[] };
+  likeAnimatedStyle?: any;
+  user: any;
 }
 
 export const Post: React.FC<PostProps> = ({
@@ -45,12 +50,54 @@ export const Post: React.FC<PostProps> = ({
   onPressOut,
   onLike,
   likeAnimatedStyle,
+  user,
 }) => {
   const [liked, setLiked] = useState(false);
+  const [localLikes, setLocalLikes] = useState(post.likes);
   const [showComments, setShowComments] = useState(false);
   const heartScale = useSharedValue(0);
   const [newComment, setNewComment] = useState("");
   const [isAddingComment, setIsAddingComment] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = postService.subscribeToLikes(post.id, (newLikes) => {
+      setLocalLikes(newLikes);
+    });
+
+    return () => unsubscribe();
+  }, [post.id]);
+
+  useEffect(() => {
+    const checkLikeStatus = async () => {
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("post_likes")
+        .select()
+        .eq("post_id", post.id)
+        .eq("user_id", user.id)
+        .single();
+
+      setLiked(!!data);
+    };
+
+    checkLikeStatus();
+  }, [post.id, user]);
+
+  const handleLike = async () => {
+    if (!user) return;
+
+    const newLikedState = !liked; // Toggle like state
+    setLiked(newLikedState);
+    setLocalLikes((prev) => (newLikedState ? prev + 1 : prev - 1));
+
+    const { success } = await postService.likePost(post.id, user.id);
+    if (!success) {
+      // Revert on failure
+      setLiked(!newLikedState);
+      setLocalLikes((prev) => (newLikedState ? prev - 1 : prev + 1));
+    }
+  };
 
   const onDoubleTap = ({
     nativeEvent,
@@ -87,134 +134,122 @@ export const Post: React.FC<PostProps> = ({
   };
 
   return (
-    <Surface style={styles.container}>
-      {/* Post Header */}
-      <View style={styles.header}>
-        <View style={styles.userInfo}>
-          <View style={styles.anonymousAvatar}>
-            <Icon name="incognito" size={20} color="#7C4DFF" />
-          </View>
-        <Text style={styles.username}>{post.username}</Text>
-        </View>
-        <Text style={styles.time}>{post.createdAt}</Text>
-      </View>
-
-      {/* Post Content */}
-      <TapGestureHandler numberOfTaps={2} onHandlerStateChange={onDoubleTap}>
-        <Animated.View
-          style={[
-            styles.contentContainer,
-            post.type === "text" && styles.textOnlyContent,
-          ]}
-        >
-          <Text
-            style={[
-              styles.content,
-              post.type === "image" && { marginBottom: 12 },
-            ]}
-          >
-            {post.content}
-          </Text>
-          {post.type === "image" && (
-            <Image
-              source={{ uri: post.imageUrl }}
-              style={styles.contentImage}
-              resizeMode="cover"
-            />
-          )}
-          <Animated.View style={[styles.heartOverlay, heartStyle]}>
-            <Icon name="heart" size={80} color="#7C4DFF" />
-          </Animated.View>
-        </Animated.View>
-      </TapGestureHandler>
-
-      {/* Action Buttons */}
-      <View style={styles.actions}>
-        <View style={styles.leftActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => setLiked(!liked)}
-          >
-            <Icon
-              name={liked ? "heart" : "heart-outline"}
-              size={24}
-              color={liked ? "#7C4DFF" : "#6B6B6B"}
-            />
-            <Text style={[styles.actionText, liked && styles.actionTextActive]}>
-              {post.likes?.toLocaleString()}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => setShowComments(!showComments)}
-          >
-            <Icon name="comment-outline" size={24} color="#7C4DFF" />
-            <Text style={styles.actionText}>{post.comments.length}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {showComments && (
-        <View style={styles.commentsSection}>
-          <View style={styles.commentHeader}>
-            <Text style={styles.commentTitle}>Comments</Text>
-            <TouchableOpacity
-              style={styles.addCommentButton}
-              onPress={() => setIsAddingComment(true)}
-            >
-              <Icon name="plus" size={20} color="#7C4DFF" />
-              <Text style={styles.addCommentText}>Add comment</Text>
+    <TapGestureHandler numberOfTaps={2} onActivated={handleLike}>
+      <Animated.View style={styles.container}>
+        <View style={styles.cardContent}>
+          <View style={styles.header}>
+            <View style={styles.userInfo}>
+              <RandomAvatar seed={post.profile.avatar_seed} size={32} />
+              <View style={styles.headerText}>
+                <Text style={styles.username}>
+                  {post.profile.username.length > 15
+                    ? `${post.profile.username.slice(0, 15)}...`
+                    : post.profile.username}
+                </Text>
+                <Text style={styles.time}>
+                  {formatTimeAgo(post.created_at)}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.moreButton}>
+              <Icon
+                name="dots-horizontal"
+                size={20}
+                color="rgba(255,255,255,0.5)"
+              />
             </TouchableOpacity>
           </View>
 
-          {isAddingComment && (
-            <View style={styles.addCommentContainer}>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Write a comment..."
-                placeholderTextColor="#6B6B6B"
-                value={newComment}
-                onChangeText={setNewComment}
-                multiline
-                autoFocus
+          {post.image_url && (
+            <View style={styles.imageContainer}>
+              <Image
+                source={{ uri: post.image_url }}
+                style={styles.image}
+                resizeMode="cover"
               />
-              <View style={styles.commentActions}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => {
-                    setIsAddingComment(false);
-                    setNewComment("");
-                  }}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.submitButton,
-                    !newComment.trim() && styles.submitButtonDisabled,
-                  ]}
-                  onPress={handleAddComment}
-                  disabled={!newComment.trim()}
-                >
-                  <Text style={styles.submitButtonText}>Comment</Text>
-                </TouchableOpacity>
-              </View>
             </View>
           )}
 
-          <ScrollView
-            style={styles.commentsScrollView}
-            showsVerticalScrollIndicator={false}
-            nestedScrollEnabled={true}
-            scrollEventThrottle={16}
-          >
-            {post.comments.map((comment) => (
-              <Comment key={comment.id} comment={comment} />
-            ))}
-          </ScrollView>
-    </View>
-      )}
-    </Surface>
+          <Text style={styles.contentText}>{post.content}</Text>
+
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.footerItem} onPress={handleLike}>
+              <Icon
+                name={liked ? "heart" : "heart-outline"}
+                size={20}
+                color={liked ? "#FF4D9C" : "#7C4DFF"}
+              />
+              <Text style={[styles.footerText, liked && { color: "#FF4D9C" }]}>
+                {localLikes}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.footerItem}
+              onPress={() => setShowComments(!showComments)}
+            >
+              <Icon name="comment-outline" size={20} color="#7C4DFF" />
+              <Text style={styles.footerText}>0</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {showComments && (
+          <View style={styles.commentsSection}>
+            <View style={styles.addCommentContainer}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Add a comment..."
+                placeholderTextColor="#666"
+                value={newComment}
+                onChangeText={setNewComment}
+                multiline
+              />
+              <TouchableOpacity
+                style={[
+                  styles.sendButton,
+                  !newComment.trim() && styles.sendButtonDisabled,
+                ]}
+                disabled={!newComment.trim()}
+              >
+                <Icon name="send" size={20} color="#7C4DFF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.commentsList}>
+              {/* Dummy comment for UI */}
+              <View style={styles.commentItem}>
+                <RandomAvatar seed="dummy1" size={32} />
+                <View style={styles.commentContent}>
+                  <Text style={styles.commentUsername}>Anonymous</Text>
+                  <Text style={styles.commentText}>
+                    This is a sample comment
+                  </Text>
+                  <View style={styles.commentActions}>
+                    <Text style={styles.commentTime}>2m ago</Text>
+                    <TouchableOpacity>
+                      <Text style={styles.replyButton}>Reply</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Sample reply */}
+                  <View style={styles.replyContainer}>
+                    <RandomAvatar seed="dummy2" size={24} />
+                    <View style={styles.replyContent}>
+                      <Text style={styles.commentUsername}>Anonymous</Text>
+                      <Text style={styles.commentText}>
+                        This is a sample reply
+                      </Text>
+                      <Text style={styles.commentTime}>1m ago</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+      </Animated.View>
+    </TapGestureHandler>
   );
 };
 
@@ -224,101 +259,77 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 16,
     backgroundColor: "#1E1E1E",
-    elevation: 4,
     overflow: "hidden",
-    borderColor: "#2A2A2A",
-    borderWidth: 1,
+    elevation: 4,
+    shadowColor: "#7C4DFF",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  cardContent: {
+    padding: 16,
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
-    borderBottomColor: "#2A2A2A",
-    borderBottomWidth: 1,
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
   userInfo: {
     flexDirection: "row",
     alignItems: "center",
   },
-  anonymousAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#2A2A2A",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: "#7C4DFF",
+  headerText: {
+    marginLeft: 10,
   },
   username: {
     fontFamily: fonts.semiBold,
     color: "#FFFFFF",
-    fontSize: 16,
-    marginLeft: 8,
+    fontSize: 14,
   },
   time: {
     fontFamily: fonts.regular,
-    color: "#6B6B6B",
+    color: "rgba(255,255,255,0.5)",
     fontSize: 12,
   },
-  contentContainer: {
-    padding: 16,
-  },
-  textOnlyContent: {
-    backgroundColor: "#2A2A2A",
-    margin: 16,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#363636",
-  },
-  content: {
+  contentText: {
     fontFamily: fonts.regular,
     color: "#FFFFFF",
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 16,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+    borderColor: "rgba(84, 84, 84, 0.5)",
+    borderWidth: 0.5,
+    borderRadius: 5,
+    padding: 10,
+    marginHorizontal: -16,
   },
-  contentImage: {
+  imageContainer: {
+    marginHorizontal: -16,
+    marginBottom: 12,
+  },
+  image: {
     width: "100%",
-    height: 300,
-    borderRadius: 12,
+    height: 200,
+    backgroundColor: "rgba(0,0,0,0.1)",
   },
-  actions: {
+  footer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 16,
-    borderTopColor: "#2A2A2A",
-    borderTopWidth: 1,
+    gap: 16,
+    marginTop: 4,
   },
-  leftActions: {
+  footerItem: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 20,
-  },
-  actionText: {
+  footerText: {
+    fontFamily: fonts.regular,
     color: "#7C4DFF",
-    marginLeft: 6,
-    fontSize: 14,
+    fontSize: 13,
   },
-  actionTextActive: {
-    color: "#FF4081",
-  },
-  heartOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
+  moreButton: {
+    padding: 4,
   },
   commentsSection: {
     borderTopWidth: 1,
@@ -407,8 +418,51 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   sendButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(124, 77, 255, 0.1)",
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
+  },
+  commentItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  commentContent: {
+    flex: 1,
+  },
+  commentUsername: {
     fontFamily: fonts.semiBold,
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  commentText: {
+    fontFamily: fonts.regular,
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  commentTime: {
+    fontFamily: fonts.regular,
+    color: "#6B6B6B",
+    fontSize: 12,
+  },
+  replyButton: {
+    fontFamily: fonts.regular,
     color: "#7C4DFF",
     fontSize: 14,
+  },
+  replyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  replyContent: {
+    flex: 1,
+  },
+  commentsList: {
+    maxHeight: 350,
+    overflow: "hidden",
   },
 });

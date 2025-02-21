@@ -41,120 +41,99 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { AvatarPickerSheet } from "../../components/sheets/AvatarPickerSheet";
 import { CreatePostSheet } from "../../components/sheets/CreatePostSheet";
 import { LoadingOverlay } from "../../components/common/LoadingOverlay";
+import { postService, Post as PostType } from "../../services/postService";
+import { useAuth } from "../../contexts/AuthContext";
+import Toast from "react-native-toast-message";
+import { supabase } from "../../lib/supabase";
 
 // Updated mock data with real images
-const MOCK_POSTS = [
-  {
-    id: "1",
-    username: "Anonymous",
-    content: "Sometimes I feel like I'm not good enough...",
-    createdAt: "2 mins ago",
-    type: "text" as const,
-    likes: 234,
-    comments: [
-      {
-        id: "c1",
-        username: "Anonymous",
-        content: "Stay strong! We're all in this together.",
-        createdAt: "1 min ago",
-        likes: 5,
-        replies: [
-          {
-            id: "r1",
-            username: "Anonymous",
-            content: "Thank you for the kind words! 🙏",
-            createdAt: "30s ago",
-            likes: 2,
-            replies: [],
-          },
-        ],
-      },
-      {
-        id: "c2",
-        username: "Anonymous",
-        content:
-          "I've been there. It gets better with time. Focus on small wins and celebrate them.",
-        createdAt: "2 min ago",
-        likes: 8,
-        replies: [],
-      },
-      {
-        id: "c3",
-        username: "Anonymous",
-        content:
-          "Remember that your worth isn't measured by your productivity or achievements.",
-        createdAt: "3 min ago",
-        likes: 12,
-        replies: [],
-      },
-      {
-        id: "c4",
-        username: "Anonymous",
-        content: "Sending virtual hugs 🫂",
-        createdAt: "4 min ago",
-        likes: 7,
-        replies: [],
-      },
-      {
-        id: "c5",
-        username: "Anonymous",
-        content:
-          "Take it one day at a time. You're doing better than you think.",
-        createdAt: "5 min ago",
-        likes: 15,
-        replies: [],
-      },
-    ],
-  },
-  {
-    id: "2",
-    username: "Anonymous",
-    content: "Found this beautiful spot today...",
-    createdAt: "15 mins ago",
-    type: "image" as const,
-    imageUrl:
-      "https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=800&auto=format&fit=crop",
-    likes: 856,
-    comments: [],
-  },
-  {
-    id: "3",
-    username: "Anonymous",
-    content:
-      "Just needed to get this off my chest: University is overwhelming and it's okay to take breaks. Mental health comes first. 🧠❤️",
-    createdAt: "1 hour ago",
-    type: "text" as const,
-    likes: 1431,
-    comments: [],
-  },
-];
+// const MOCK_POSTS: PostType[] = [
+//   {
+//     id: "1",
+//     username: "Anonymous",
+//     content: "Sometimes I feel like I'm not good enough...",
+//     createdAt: "2 mins ago",
+//     type: "text" as const,
+//     likes: 234,
+//     comments: [
+//       {
+//         id: "c1",
+//         username: "Anonymous",
+//         content: "Stay strong! We're all in this together.",
+//         createdAt: "1 min ago",
+//         likes: 5,
+//         replies: [
+//           {
+//             id: "r1",
+//             username: "Anonymous",
+//             content: "Thank you for the kind words! 🙏",
+//             createdAt: "30s ago",
+//             likes: 2,
+//             replies: [],
+//           },
+//         ],
+//       },
+//       {
+//         id: "c2",
+//         username: "Anonymous",
+//         content:
+//           "I've been there. It gets better with time. Focus on small wins and celebrate them.",
+//         createdAt: "2 min ago",
+//         likes: 8,
+//         replies: [],
+//       },
+//       {
+//         id: "c3",
+//         username: "Anonymous",
+//         content:
+//           "Remember that your worth isn't measured by your productivity or achievements.",
+//         createdAt: "3 min ago",
+//         likes: 12,
+//         replies: [],
+//       },
+//       {
+//         id: "c4",
+//         username: "Anonymous",
+//         content: "Sending virtual hugs 🫂",
+//         createdAt: "4 min ago",
+//         likes: 7,
+//         replies: [],
+//       },
+//       {
+//         id: "c5",
+//         username: "Anonymous",
+//         content:
+//           "Take it one day at a time. You're doing better than you think.",
+//         createdAt: "5 min ago",
+//         likes: 15,
+//         replies: [],
+//       },
+//     ],
+//   },
+//   {
+//     id: "2",
+//     username: "Anonymous",
+//     content: "Found this beautiful spot today...",
+//     createdAt: "15 mins ago",
+//     type: "image" as const,
+//     imageUrl:
+//       "https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=800&auto=format&fit=crop",
+//     likes: 856,
+//     comments: [],
+//   },
+//   {
+//     id: "3",
+//     username: "Anonymous",
+//     content:
+//       "Just needed to get this off my chest: University is overwhelming and it's okay to take breaks. Mental health comes first. 🧠❤️",
+//     createdAt: "1 hour ago",
+//     type: "text" as const,
+//     likes: 1431,
+//     comments: [],
+//   },
+// ];
 
 declare module "react-native-vector-icons/MaterialCommunityIcons";
-
-type FeedItem = {
-  id: string;
-  username: string;
-  content: string;
-  createdAt: string;
-  type: "text" | "image";
-  likes: number;
-  comments: Array<{
-    id: string;
-    username: string;
-    content: string;
-    createdAt: string;
-    likes: number;
-    replies: Array<{
-      id: string;
-      username: string;
-      content: string;
-      createdAt: string;
-      likes: number;
-      replies: never[];
-    }>;
-  }>;
-  imageUrl?: string;
-};
 
 const { width } = Dimensions.get("window");
 
@@ -231,9 +210,10 @@ const WhisperCard = ({ item }: { item: Whisper }) => {
 };
 
 // Create an enhanced Post component with animations
-const AnimatedPost = ({ item, index }: { item: FeedItem; index: number }) => {
+const AnimatedPost = ({ item, index }: { item: PostType; index: number }) => {
   const scale = useSharedValue(1);
   const likeScale = useSharedValue(1);
+  const { user } = useAuth();
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -243,6 +223,13 @@ const AnimatedPost = ({ item, index }: { item: FeedItem; index: number }) => {
     transform: [{ scale: likeScale.value }],
   }));
 
+  const handleLike = () => {
+    likeScale.value = withSequence(
+      withSpring(1.2),
+      withDelay(100, withSpring(1))
+    );
+  };
+
   return (
     <Animated.View
       entering={SlideInRight.delay(index * 100)}
@@ -250,18 +237,14 @@ const AnimatedPost = ({ item, index }: { item: FeedItem; index: number }) => {
     >
       <Post
         post={item}
+        user={user}
         onPressIn={() => {
           scale.value = withSpring(0.98);
         }}
         onPressOut={() => {
           scale.value = withSpring(1);
         }}
-        onLike={() => {
-          likeScale.value = withSequence(
-            withSpring(1.2),
-            withDelay(100, withSpring(1))
-          );
-        }}
+        onLike={handleLike}
         likeAnimatedStyle={likeAnimatedStyle}
       />
     </Animated.View>
@@ -276,38 +259,109 @@ export const FeedScreen = () => {
     content: string;
     image: string | null;
   }>({ content: "", image: null });
-  const [feeds, setFeeds] = useState<FeedItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("trending");
+  const [feeds, setFeeds] = useState<PostType[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"trending" | "latest">("trending");
   const scale = useSharedValue(1);
   const createPostRef = useRef<BottomSheetModal>(null);
+  const { user } = useAuth();
 
-  const onRefresh = React.useCallback(async () => {
+  const loadFeeds = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const { posts, error } = await postService.getPosts(activeTab);
+      if (error) throw error;
+      if (posts) {
+        setFeeds(posts);
+      }
+    } catch (error) {
+      console.error("Error loading feeds:", error);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFeeds();
+
+    // Set up polling interval with silent updates
+    const pollInterval = setInterval(() => loadFeeds(true), 5000);
+
+    // Subscribe to post changes
+    const postSubscription = supabase
+      .channel("public:posts")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "posts",
+        },
+        async (payload) => {
+          const { data: newPost } = await supabase
+            .from("posts")
+            .select(`*, profile:profiles(username, avatar_seed)`)
+            .eq("id", payload.new.id)
+            .single();
+
+          if (newPost) {
+            setFeeds((prev) => [newPost, ...prev]);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "posts",
+        },
+        async (payload) => {
+          setFeeds((prev) =>
+            prev.map((post) =>
+              post.id === payload.new.id ? { ...post, ...payload.new } : post
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(postSubscription);
+    };
+  }, [activeTab]);
+
+  const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      dispatch({ type: "SET_POSTS", payload: MOCK_POSTS });
-      setRefreshing(false);
-    }, 1500);
-  }, []);
+    await loadFeeds();
+    setRefreshing(false);
+  };
 
   const createPost = async (content: string, image?: string) => {
+    if (!user) return;
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      const newPost: FeedItem = {
-        id: Date.now().toString(),
-        username: "Anonymous",
+      const { post, error } = await postService.createPost(
         content,
-        createdAt: "Just now",
-        type: image ? "image" : "text",
-        imageUrl: image,
-        likes: 0,
-        comments: [],
-      };
+        user.id,
+        image
+      );
 
-      setFeeds((prev) => [newPost, ...prev]);
+      if (error) throw error;
+      if (post) {
+        setFeeds((prev) => [post, ...prev]);
+        Toast.show({
+          type: "success",
+          text1: "Post created successfully",
+        });
+      }
     } catch (error) {
       console.error("Error creating post:", error);
+      Toast.show({
+        type: "error",
+        text1: "Failed to create post",
+      });
     }
   };
 
@@ -340,28 +394,6 @@ export const FeedScreen = () => {
     }
   };
 
-  useEffect(() => {
-    const loadFeeds = async () => {
-      try {
-        const data = await fetchFeeds();
-        setFeeds(
-          data
-            .filter((feed) => feed.type === "text" || feed.type === "image")
-            .map((feed) => ({
-              ...feed,
-              type: feed.type as "image" | "text",
-            }))
-        );
-      } catch (error) {
-        console.error("Error loading feeds:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadFeeds();
-  }, []);
-
   const tabs = [
     { id: "trending", icon: "trending-up", label: "Trending" },
     { id: "latest", icon: "clock-outline", label: "Latest" },
@@ -384,13 +416,16 @@ export const FeedScreen = () => {
     <WhisperCard item={item} />
   );
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+  // Add this component for empty state
+  const EmptyFeed = () => (
+    <View style={styles.emptyContainer}>
+      <Icon name="post-outline" size={64} color="#666" />
+      <Text style={styles.emptyText}>No whispers yet</Text>
+      <Text style={styles.emptySubtext}>
+        Be the first to share your thoughts
+      </Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "right", "left"]}>
@@ -428,7 +463,7 @@ export const FeedScreen = () => {
             <TouchableOpacity
               key={tab.id}
               style={[styles.tab, activeTab === tab.id && styles.activeTab]}
-              onPress={() => setActiveTab(tab.id)}
+              onPress={() => setActiveTab(tab.id as "trending" | "latest")}
             >
               <Icon
                 name={tab.icon}
@@ -457,12 +492,13 @@ export const FeedScreen = () => {
         keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={loading || refreshing}
             onRefresh={onRefresh}
             tintColor="#7C4DFF"
             colors={["#7C4DFF"]}
           />
         }
+        ListEmptyComponent={!loading ? EmptyFeed : null}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
       />
@@ -718,5 +754,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     marginHorizontal: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    fontFamily: fonts.bold,
+    color: "#FFFFFF",
+    fontSize: 18,
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontFamily: fonts.regular,
+    color: "rgba(255, 255, 255, 0.5)",
+    fontSize: 14,
   },
 });

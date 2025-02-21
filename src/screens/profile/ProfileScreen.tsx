@@ -10,6 +10,7 @@ import {
   FlatList,
   SafeAreaView,
   Linking,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView as SafeAreaViewCompat } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -44,6 +45,8 @@ import Toast from "react-native-toast-message";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
+import { Post as PostType } from "../../services/postService";
+import { formatTimeAgo } from "../../utils/formatTimeAgo";
 
 const { width, height } = Dimensions.get("window");
 
@@ -178,6 +181,8 @@ export const ProfileScreen = () => {
   const modalScale = useSharedValue(0.8);
   const previewScale = useSharedValue(1);
   const [hasActiveNudges, setHasActiveNudges] = useState(false);
+  const [userPosts, setUserPosts] = useState<PostType[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const modalAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: modalScale.value }],
@@ -208,6 +213,64 @@ export const ProfileScreen = () => {
 
     loadAvatar();
   }, []);
+
+  useEffect(() => {
+    if (profile) {
+      loadUserPosts();
+      subscribeToUserPosts();
+    }
+  }, [profile]);
+
+  const loadUserPosts = async () => {
+    if (!profile) return;
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("posts")
+        .select(
+          `
+          *,
+          profile:profiles(username, avatar_seed)
+        `
+        )
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setUserPosts(data as PostType[]);
+    } catch (error) {
+      console.error("Error loading user posts:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const subscribeToUserPosts = () => {
+    if (!profile) return;
+
+    const subscription = supabase
+      .channel(`user-posts-${profile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "posts",
+          filter: `user_id=eq.${profile.id}`,
+        },
+        () => {
+          // Reload posts when changes occur
+          loadUserPosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  };
 
   const handleAvatarSelect = async (seed: string) => {
     try {
@@ -295,6 +358,61 @@ export const ProfileScreen = () => {
     } catch (error) {
       console.error("Error creating nudge:", error);
     }
+  };
+
+  const navigateToPost = (post: PostType) => {
+    // @ts-ignore - Navigation typing issue
+    navigation.navigate("Feed", {
+      screen: "FeedTab",
+      params: { highlightedPostId: post.id },
+    });
+  };
+
+  const RecentWhispers = () => {
+    if (loading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator color="#7C4DFF" />
+        </View>
+      );
+    }
+
+    if (userPosts.length === 0) {
+      return (
+        <View style={styles.emptyWhispers}>
+          <Icon name="message-outline" size={48} color="#666" />
+          <Text style={styles.emptyText}>No whispers yet</Text>
+          <Text style={styles.emptySubtext}>
+            Your whispers will appear here
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.whispersContainer}>
+        {userPosts.map((post) => (
+          <TouchableOpacity
+            key={post.id}
+            style={styles.whisperItem}
+            onPress={() => navigateToPost(post)}
+          >
+            <Text style={styles.whisperContent} numberOfLines={2}>
+              {post.content}
+            </Text>
+            <View style={styles.whisperFooter}>
+              <Text style={styles.whisperTime}>
+                {formatTimeAgo(post.created_at)}
+              </Text>
+              <View style={styles.whisperStats}>
+                <Icon name="heart" size={14} color="#FF4D9C" />
+                <Text style={styles.statText}>{post.likes}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
   };
 
   return (
@@ -444,57 +562,9 @@ export const ProfileScreen = () => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Recent Whispers</Text>
-          {[1, 2, 3].map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={styles.whisperCard}
-              onPress={() => {}}
-            >
-              <View style={styles.whisperHeader}>
-                <Icon name="clock-outline" size={16} color="#6B6B6B" />
-                <Text style={styles.whisperTime}>2 days ago</Text>
-              </View>
-              <Text style={styles.whisperContent}>
-                Thoughts become whispers, whispers become changes...
-              </Text>
-              <View style={styles.whisperStats}>
-                <View style={styles.whisperStat}>
-                  <Icon name="heart-outline" size={16} color="#7C4DFF" />
-                  <Text style={styles.whisperStatText}>24</Text>
-                </View>
-                <View style={styles.whisperStat}>
-                  <Icon name="comment-outline" size={16} color="#7C4DFF" />
-                  <Text style={styles.whisperStatText}>8</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+          <Text style={styles.sectionTitle}>Recent Whispers</Text>
+          <RecentWhispers />
         </View>
-
-        {/* <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Settings</Text>
-          <TouchableOpacity style={styles.settingItem}>
-            <Icon name="theme-light-dark" size={24} color="#7C4DFF" />
-            <Text style={styles.settingText}>Theme</Text>
-            <Icon name="chevron-right" size={24} color="#6B6B6B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
-            <Icon name="bell-outline" size={24} color="#7C4DFF" />
-            <Text style={styles.settingText}>Notifications</Text>
-            <Icon name="chevron-right" size={24} color="#6B6B6B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem}>
-            <Icon name="shield-outline" size={24} color="#7C4DFF" />
-            <Text style={styles.settingText}>Privacy</Text>
-            <Icon name="chevron-right" size={24} color="#6B6B6B" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.settingItem} onPress={handleLogout}>
-            <Icon name="logout" size={24} color="#7C4DFF" />
-            <Text style={styles.settingText}>Logout</Text>
-            <Icon name="chevron-right" size={24} color="#6B6B6B" />
-          </TouchableOpacity>
-        </View> */}
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
@@ -635,13 +705,12 @@ const styles = StyleSheet.create({
   },
   section: {
     padding: 16,
-    marginTop: 16,
   },
   sectionTitle: {
     fontFamily: fonts.semiBold,
     color: "#FFFFFF",
     fontSize: 18,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   whisperCard: {
     backgroundColor: "#1E1E1E",
@@ -669,6 +738,7 @@ const styles = StyleSheet.create({
   whisperStats: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
   },
   whisperStat: {
     flexDirection: "row",
@@ -928,5 +998,44 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     color: "#FFFFFF",
     fontSize: 16,
+  },
+  centerContainer: {
+    padding: 24,
+    alignItems: "center",
+  },
+  whispersContainer: {
+    marginTop: 12,
+  },
+  whisperItem: {
+    backgroundColor: "#1E1E1E",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  whisperFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  emptyWhispers: {
+    alignItems: "center",
+    padding: 24,
+  },
+  emptyText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: fonts.semiBold,
+    marginTop: 12,
+  },
+  emptySubtext: {
+    color: "#666",
+    fontSize: 14,
+    fontFamily: fonts.regular,
+    marginTop: 4,
+  },
+  statText: {
+    color: "#FF4D9C",
+    fontSize: 12,
+    fontFamily: fonts.regular,
   },
 });

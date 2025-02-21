@@ -9,7 +9,10 @@ interface RandomAvatarProps {
   size?: number;
 }
 
-export const RandomAvatar: React.FC<RandomAvatarProps> = ({ seed, size = 80 }) => {
+export const RandomAvatar: React.FC<RandomAvatarProps> = ({
+  seed,
+  size = 80,
+}) => {
   const [svgContent, setSvgContent] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,7 +42,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 50, // Make the avatar circular
     overflow: "hidden",
-    width: 100,
-    height: 100,
   },
 });
