@@ -129,6 +129,87 @@ io.on("connection", (socket: CustomSocket) => {
       }
     }
   );
+
+  // Add new socket handler for comments
+  socket.on(
+    "create_comment",
+    async (data: {
+      postId: string;
+      userId: string;
+      content: string;
+      parent_id?: string;
+    }) => {
+      try {
+        const { data: comment, error } = await supabase
+          .from("comments")
+          .insert({
+            post_id: data.postId,
+            user_id: data.userId,
+            content: data.content,
+            parent_id: data.parent_id || null,
+            likes: 0,
+          })
+          .select("*")
+          .single();
+
+        if (error) throw error;
+
+        // Emit with complete comment data
+        io.emit("new_comment", {
+          id: comment.id,
+          post_id: comment.post_id,
+          user_id: comment.user_id,
+          content: comment.content,
+          parent_id: comment.parent_id,
+          created_at: comment.created_at,
+          likes: comment.likes,
+        });
+      } catch (error) {
+        console.error("Error creating comment:", error);
+        socket.emit("comment_error", { message: "Failed to create comment" });
+      }
+    }
+  );
+
+  // Add handler for comment likes
+  socket.on(
+    "like_comment",
+    async (data: { commentId: string; userId: string; liked: boolean }) => {
+      try {
+        const { commentId, userId, liked } = data;
+
+        if (liked) {
+          await supabase
+            .from("comment_likes")
+            .insert({ comment_id: commentId, user_id: userId });
+        } else {
+          await supabase
+            .from("comment_likes")
+            .delete()
+            .eq("comment_id", commentId)
+            .eq("user_id", userId);
+        }
+
+        // Get updated likes count
+        const { data: likes } = await supabase
+          .from("comment_likes")
+          .select("id", { count: "exact" })
+          .eq("comment_id", commentId);
+
+        const likesCount = likes?.length || 0;
+
+        // Broadcast to all clients
+        io.emit("comment_like_update", {
+          commentId,
+          likesCount,
+          userId,
+          liked,
+        });
+      } catch (error) {
+        console.error("Error handling comment like:", error);
+      }
+    }
+  );
 });
 
 const PORT = process.env.PORT || 3001;

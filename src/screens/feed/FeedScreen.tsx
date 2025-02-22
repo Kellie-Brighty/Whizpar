@@ -475,7 +475,10 @@ export const FeedScreen = () => {
       </BlurView>
 
       <Animated.FlatList
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[
+          styles.listContainer,
+          { paddingBottom: Platform.OS === 'ios' ? 120 : 100 }  // Increase bottom padding on iOS
+        ]}
         data={feeds}
         renderItem={({ item, index }) => (
           <AnimatedPost item={item} index={index} />
@@ -523,7 +526,6 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     paddingTop: 8,
-    paddingBottom: 100,
   },
   modalOverlay: {
     flex: 1,

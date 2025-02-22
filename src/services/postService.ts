@@ -2,17 +2,17 @@ import { supabase } from "../lib/supabase";
 
 export type Comment = {
   id: string;
-  username: string;
   content: string;
-  createdAt: string;
+  user_id: string;
+  created_at: string;
   likes: number;
-  replies: Array<{
+  liked?: boolean;
+  replies?: Array<{
     id: string;
-    username: string;
     content: string;
-    createdAt: string;
+    user_id: string;
+    created_at: string;
     likes: number;
-    replies: never[];
   }>;
 };
 
@@ -24,11 +24,27 @@ export type Post = {
   image_url: string | null;
   likes: number;
   engagement: number;
+  comment_count: number;
   profile: {
     username: string;
     avatar_seed: string;
   };
+  comments?: Comment[];
 };
+
+type PostgresChangesPayload = {
+  new: { [key: string]: any };
+  old: { [key: string]: any };
+};
+
+interface CommentType {
+  id: string;
+  content: string;
+  user_id: string;
+  created_at: string;
+  likes: number;
+  parent_id: string | null;
+}
 
 export const postService = {
   createPost: async (content: string, userId: string, imageUrl?: string) => {
@@ -61,27 +77,124 @@ export const postService = {
 
   getPosts: async (type: "trending" | "latest" = "latest") => {
     try {
+      const { data: commentCounts } = await supabase
+        .rpc("get_comment_counts_by_post")
+        .select();
+
+      // Update the posts query to properly structure comments and replies
       const query = supabase.from("posts").select(`
         *,
         profile:profiles(username, avatar_seed),
-        post_likes(count)
+        comments:comments!post_id(
+          id,
+          content,
+          user_id,
+          created_at,
+          likes,
+          parent_id
+        )
       `);
 
       if (type === "trending") {
-        // Only show posts with likes > 0 in trending
         query.gt("likes", 0).order("likes", { ascending: false });
       } else {
-        // Show all posts in latest, ordered by creation time
         query.order("created_at", { ascending: false });
       }
 
-      const { data, error } = await query;
+      const { data: posts, error } = await query;
 
       if (error) throw error;
-      return { posts: data as Post[], error: null };
+
+      // Structure comments and replies
+      if (posts) {
+        const postsWithComments = posts.map((post) => {
+          const comments = post.comments || [];
+          const topLevelComments = comments.filter(
+            (c: CommentType) => !c.parent_id
+          );
+          const replies = comments.filter((c: CommentType) => c.parent_id);
+
+          const commentsWithReplies = topLevelComments.map(
+            (comment: CommentType) => ({
+              ...comment,
+              replies: replies.filter(
+                (reply: CommentType) => reply.parent_id === comment.id
+              ),
+            })
+          );
+
+          return {
+            ...post,
+            comments: commentsWithReplies,
+            comment_count:
+              commentCounts?.find(
+                (c: { post_id: string; count: number }) => c.post_id === post.id
+              )?.count || 0,
+            engagement:
+              (post.likes || 0) +
+              Number(
+                commentCounts?.find(
+                  (c: { post_id: string; count: number }) =>
+                    c.post_id === post.id
+                )?.count || 0
+              ) *
+                2,
+          };
+        });
+
+        if (type === "trending") {
+          postsWithComments.sort((a, b) => b.engagement - a.engagement);
+        }
+
+        return { posts: postsWithComments as Post[], error: null };
+      }
+
+      return { posts: null, error };
     } catch (error) {
       console.error("Error fetching posts:", error);
       return { posts: null, error };
+    }
+  },
+
+  getComments: async (postId: string) => {
+    try {
+      // First get all comments for this post
+      const { data: allComments, error } = await supabase
+        .from("comments")
+        .select(
+          `
+          id,
+          content,
+          user_id,
+          created_at,
+          likes,
+          parent_id
+        `
+        )
+        .eq("post_id", postId)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      // Separate top-level comments and replies
+      const topLevelComments = allComments?.filter(
+        (comment) => comment.parent_id === null
+      );
+      const replies = allComments?.filter(
+        (comment) => comment.parent_id !== null
+      );
+
+      // Attach replies to their parent comments
+      const commentsWithReplies = topLevelComments?.map((comment) => ({
+        ...comment,
+        replies:
+          replies?.filter((reply) => reply.parent_id === comment.id) || [],
+      }));
+
+      return { comments: commentsWithReplies as Comment[], error: null };
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      return { comments: null, error };
     }
   },
 
@@ -95,7 +208,7 @@ export const postService = {
           schema: "public",
           table: "posts",
         },
-        async (payload) => {
+        async (payload: PostgresChangesPayload) => {
           const { data, error } = await supabase
             .from("posts")
             .select(
@@ -196,26 +309,29 @@ export const postService = {
 
   subscribeToPostEngagements: (callback: (post: Post) => void) => {
     console.log("Setting up post engagements subscription");
-    
-    const channel = supabase.channel('post-engagements')
+
+    const channel = supabase
+      .channel("post-engagements")
       // Listen to post changes
       .on(
-        'postgres_changes',
-        { 
-          event: '*',
-          schema: 'public',
-          table: 'posts' 
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "posts",
         },
-        async (payload) => {
+        async (payload: PostgresChangesPayload) => {
           console.log("Post change detected:", payload);
-          
+
           const { data: post } = await supabase
-            .from('posts')
-            .select(`
+            .from("posts")
+            .select(
+              `
               *,
               profile:profiles(username, avatar_seed)
-            `)
-            .eq('id', payload.new.id)
+            `
+            )
+            .eq("id", payload.new.id)
             .single();
 
           if (post) {
@@ -225,17 +341,17 @@ export const postService = {
       )
       // Listen to like changes
       .on(
-        'postgres_changes',
-        { 
-          event: '*',
-          schema: 'public',
-          table: 'post_likes' 
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "post_likes",
         },
-        async (payload) => {
+        async (payload: PostgresChangesPayload) => {
           console.log("Like change detected:", payload);
-          
+
           const postId = payload.new?.post_id || payload.old?.post_id;
-          
+
           if (!postId) return;
 
           // Get updated likes count and post data
@@ -248,13 +364,13 @@ export const postService = {
               .from("posts")
               .select(`*, profile:profiles(username, avatar_seed)`)
               .eq("id", postId)
-              .single()
+              .single(),
           ]);
 
           if (post) {
             const updatedPost = {
               ...post,
-              likes: likesCount?.length || 0
+              likes: likesCount?.length || 0,
             };
 
             // Update the post with new likes count
