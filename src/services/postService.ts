@@ -194,30 +194,84 @@ export const postService = {
     }
   },
 
-  subscribeToLikes: (postId: string, callback: (likes: number) => void) => {
-    const subscription = supabase
-      .channel(`post-${postId}`)
+  subscribeToPostEngagements: (callback: (post: Post) => void) => {
+    console.log("Setting up post engagements subscription");
+    
+    const channel = supabase.channel('post-engagements')
+      // Listen to post changes
       .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "post_likes",
-          filter: `post_id=eq.${postId}`,
+        'postgres_changes',
+        { 
+          event: '*',
+          schema: 'public',
+          table: 'posts' 
         },
-        async () => {
-          const { data: likesCount } = await supabase
-            .from("post_likes")
-            .select("id", { count: "exact" })
-            .eq("post_id", postId);
+        async (payload) => {
+          console.log("Post change detected:", payload);
+          
+          const { data: post } = await supabase
+            .from('posts')
+            .select(`
+              *,
+              profile:profiles(username, avatar_seed)
+            `)
+            .eq('id', payload.new.id)
+            .single();
 
-          callback(likesCount?.length || 0);
+          if (post) {
+            callback(post);
+          }
+        }
+      )
+      // Listen to like changes
+      .on(
+        'postgres_changes',
+        { 
+          event: '*',
+          schema: 'public',
+          table: 'post_likes' 
+        },
+        async (payload) => {
+          console.log("Like change detected:", payload);
+          
+          const postId = payload.new?.post_id || payload.old?.post_id;
+          
+          if (!postId) return;
+
+          // Get updated likes count and post data
+          const [{ data: likesCount }, { data: post }] = await Promise.all([
+            supabase
+              .from("post_likes")
+              .select("id", { count: "exact" })
+              .eq("post_id", postId),
+            supabase
+              .from("posts")
+              .select(`*, profile:profiles(username, avatar_seed)`)
+              .eq("id", postId)
+              .single()
+          ]);
+
+          if (post) {
+            const updatedPost = {
+              ...post,
+              likes: likesCount?.length || 0
+            };
+
+            // Update the post with new likes count
+            await supabase
+              .from("posts")
+              .update({ likes: updatedPost.likes })
+              .eq("id", postId);
+
+            callback(updatedPost);
+          }
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(subscription);
+      console.log("Cleaning up post engagements subscription");
+      supabase.removeChannel(channel);
     };
   },
 };

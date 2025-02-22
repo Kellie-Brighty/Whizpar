@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import {
   View,
   StyleSheet,
@@ -45,6 +45,8 @@ import { postService, Post as PostType } from "../../services/postService";
 import { useAuth } from "../../contexts/AuthContext";
 import Toast from "react-native-toast-message";
 import { supabase } from "../../lib/supabase";
+
+import { createSocket } from "../../lib/socket";
 
 // Updated mock data with real images
 // const MOCK_POSTS: PostType[] = [
@@ -251,6 +253,22 @@ const AnimatedPost = ({ item, index }: { item: PostType; index: number }) => {
   );
 };
 
+type PostLikePayload = {
+  post_id: string;
+  user_id: string;
+};
+
+type PostPayload = {
+  id: string;
+  content: string;
+  user_id: string;
+};
+
+type RealtimePayload = {
+  new: PostLikePayload | null;
+  old: PostLikePayload | null;
+};
+
 export const FeedScreen = () => {
   const { state, dispatch } = usePost();
   const [refreshing, setRefreshing] = useState(false);
@@ -265,6 +283,7 @@ export const FeedScreen = () => {
   const scale = useSharedValue(1);
   const createPostRef = useRef<BottomSheetModal>(null);
   const { user } = useAuth();
+  const socket = useMemo(() => createSocket(user?.id), [user?.id]);
 
   const loadFeeds = async (silent = false) => {
     try {
@@ -284,51 +303,26 @@ export const FeedScreen = () => {
   useEffect(() => {
     loadFeeds();
 
-    // Set up polling interval with silent updates
-    const pollInterval = setInterval(() => loadFeeds(true), 5000);
+    // Listen for new posts
+    socket.on("new_post", (newPost: PostType) => {
+      setFeeds((prev) => [newPost, ...prev]);
+    });
 
-    // Subscribe to post changes
-    const postSubscription = supabase
-      .channel("public:posts")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "posts",
-        },
-        async (payload) => {
-          const { data: newPost } = await supabase
-            .from("posts")
-            .select(`*, profile:profiles(username, avatar_seed)`)
-            .eq("id", payload.new.id)
-            .single();
-
-          if (newPost) {
-            setFeeds((prev) => [newPost, ...prev]);
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "posts",
-        },
-        async (payload) => {
-          setFeeds((prev) =>
-            prev.map((post) =>
-              post.id === payload.new.id ? { ...post, ...payload.new } : post
-            )
-          );
-        }
-      )
-      .subscribe();
+    // Listen for like updates
+    socket.on(
+      "like_update",
+      ({ postId, likesCount }: { postId: string; likesCount: number }) => {
+        setFeeds((prev) =>
+          prev.map((feed) =>
+            feed.id === postId ? { ...feed, likes: likesCount } : feed
+          )
+        );
+      }
+    );
 
     return () => {
-      clearInterval(pollInterval);
-      supabase.removeChannel(postSubscription);
+      socket.off("new_post");
+      socket.off("like_update");
     };
   }, [activeTab]);
 
@@ -342,20 +336,17 @@ export const FeedScreen = () => {
     if (!user) return;
 
     try {
-      const { post, error } = await postService.createPost(
+      // Emit create_post event to socket server
+      socket.emit("create_post", {
         content,
-        user.id,
-        image
-      );
+        userId: user.id,
+        image,
+      });
 
-      if (error) throw error;
-      if (post) {
-        setFeeds((prev) => [post, ...prev]);
-        Toast.show({
-          type: "success",
-          text1: "Post created successfully",
-        });
-      }
+      Toast.show({
+        type: "success",
+        text1: "Post created successfully",
+      });
     } catch (error) {
       console.error("Error creating post:", error);
       Toast.show({

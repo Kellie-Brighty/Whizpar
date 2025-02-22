@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -47,6 +47,9 @@ import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { Post as PostType } from "../../services/postService";
 import { formatTimeAgo } from "../../utils/formatTimeAgo";
+import { RecentWhispers } from "../../components/profile/RecentWhispers";
+import { createSocket } from "../../lib/socket";
+import { AllWhispersSheet } from "../../components/sheets/AllWhispersSheet";
 
 const { width, height } = Dimensions.get("window");
 
@@ -183,6 +186,7 @@ export const ProfileScreen = () => {
   const [hasActiveNudges, setHasActiveNudges] = useState(false);
   const [userPosts, setUserPosts] = useState<PostType[]>([]);
   const [loading, setLoading] = useState(false);
+  const [recentPosts, setRecentPosts] = useState<PostType[]>([]);
 
   const modalAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: modalScale.value }],
@@ -196,8 +200,12 @@ export const ProfileScreen = () => {
   const historySheetRef = useRef<BottomSheetModal>(null);
   const avatarPickerRef = useRef<BottomSheetModal>(null);
   const publicNudgeRef = useRef<BottomSheetModal>(null);
+  const allWhispersRef = useRef<BottomSheetModal>(null);
 
-  const { profile, setProfile, signOut } = useAuth();
+  const { profile, setProfile, signOut, user } = useAuth();
+
+  // Add socket connection
+  const socket = useMemo(() => createSocket(user?.id), [user?.id]);
 
   useEffect(() => {
     console.log("Current profile data in ProfileScreen:", profile);
@@ -220,6 +228,35 @@ export const ProfileScreen = () => {
       subscribeToUserPosts();
     }
   }, [profile]);
+
+  useEffect(() => {
+    // Listen for like updates
+    socket.on("like_update", ({ postId, likesCount }) => {
+      setUserPosts((prev) =>
+        prev.map((post) =>
+          post.id === postId ? { ...post, likes: likesCount } : post
+        )
+      );
+      setRecentPosts((prev) =>
+        prev.map((post) =>
+          post.id === postId ? { ...post, likes: likesCount } : post
+        )
+      );
+    });
+
+    // Listen for new posts
+    socket.on("new_post", (newPost: PostType) => {
+      if (newPost.user_id === user?.id) {
+        setUserPosts((prev) => [newPost, ...prev]);
+        setRecentPosts((prev) => [newPost, ...prev]);
+      }
+    });
+
+    return () => {
+      socket.off("like_update");
+      socket.off("new_post");
+    };
+  }, [socket, user?.id]);
 
   const loadUserPosts = async () => {
     if (!profile) return;
@@ -368,49 +405,48 @@ export const ProfileScreen = () => {
     });
   };
 
-  const RecentWhispers = () => {
+  const RecentWhispersComponent = () => {
     if (loading) {
-      return (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator color="#7C4DFF" />
-        </View>
-      );
+      return <ActivityIndicator color="#7C4DFF" />;
     }
 
-    if (userPosts.length === 0) {
-      return (
-        <View style={styles.emptyWhispers}>
-          <Icon name="message-outline" size={48} color="#666" />
-          <Text style={styles.emptyText}>No whispers yet</Text>
-          <Text style={styles.emptySubtext}>
-            Your whispers will appear here
-          </Text>
-        </View>
-      );
-    }
+    const recentPosts = userPosts.slice(0, 2); // Show only 2 posts
 
     return (
-      <View style={styles.whispersContainer}>
-        {userPosts.map((post) => (
-          <TouchableOpacity
-            key={post.id}
-            style={styles.whisperItem}
-            onPress={() => navigateToPost(post)}
-          >
-            <Text style={styles.whisperContent} numberOfLines={2}>
-              {post.content}
-            </Text>
-            <View style={styles.whisperFooter}>
-              <Text style={styles.whisperTime}>
-                {formatTimeAgo(post.created_at)}
+      <View>
+        <View style={styles.whispersContainer}>
+          {recentPosts.map((post) => (
+            <TouchableOpacity
+              key={post.id}
+              style={styles.whisperItem}
+              onPress={() => navigateToPost(post)}
+            >
+              <Text style={styles.whisperContent} numberOfLines={2}>
+                {post.content}
               </Text>
-              <View style={styles.whisperStats}>
-                <Icon name="heart" size={14} color="#FF4D9C" />
-                <Text style={styles.statText}>{post.likes}</Text>
+              <View style={styles.whisperFooter}>
+                <Text style={styles.whisperTime}>
+                  {formatTimeAgo(post.created_at)}
+                </Text>
+                <View style={styles.whisperStats}>
+                  <Icon name="heart" size={14} color="#FF4D9C" />
+                  <Text style={styles.statText}>{post.likes}</Text>
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {userPosts.length > 2 && (
+          <TouchableOpacity
+            style={styles.showMoreButton}
+            onPress={() => {
+              console.log("Show more pressed");
+              allWhispersRef.current?.present();
+            }}
+          >
+            <Text style={styles.showMoreText}>Show More Whispers</Text>
           </TouchableOpacity>
-        ))}
+        )}
       </View>
     );
   };
@@ -563,7 +599,7 @@ export const ProfileScreen = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Whispers</Text>
-          <RecentWhispers />
+          <RecentWhispersComponent />
         </View>
 
         <View style={styles.actionButtons}>
@@ -607,6 +643,7 @@ export const ProfileScreen = () => {
         availableCoins={1250}
         onSubmit={handleCreateNudge}
       />
+      <AllWhispersSheet ref={allWhispersRef} posts={userPosts} user={user} />
     </SafeAreaViewCompat>
   );
 };
@@ -1037,5 +1074,17 @@ const styles = StyleSheet.create({
     color: "#FF4D9C",
     fontSize: 12,
     fontFamily: fonts.regular,
+  },
+  showMoreButton: {
+    backgroundColor: "#7C4DFF33",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  showMoreText: {
+    color: "#7C4DFF",
+    fontFamily: fonts.regular,
+    fontSize: 14,
   },
 });

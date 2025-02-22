@@ -9,6 +9,8 @@ import * as Font from "expo-font";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import Toast from "react-native-toast-message";
 import { AuthProvider } from "./src/contexts/AuthContext";
+import "react-native-url-polyfill/auto";
+import { ThemeProvider } from "react-native-paper";
 
 export default function App() {
   const [fontsLoaded] = Font.useFonts({
@@ -26,17 +28,19 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <NavigationContainer>
-          <AuthProvider>
-            <PaperProvider>
-              <PostProvider>
-                <BottomSheetModalProvider>
-                  <RootNavigator />
-                </BottomSheetModalProvider>
-              </PostProvider>
-            </PaperProvider>
-          </AuthProvider>
+          <BottomSheetModalProvider>
+            <AuthProvider>
+              <ThemeProvider>
+                <PaperProvider>
+                  <PostProvider>
+                    <RootNavigator />
+                    <Toast />
+                  </PostProvider>
+                </PaperProvider>
+              </ThemeProvider>
+            </AuthProvider>
+          </BottomSheetModalProvider>
         </NavigationContainer>
-        <Toast />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

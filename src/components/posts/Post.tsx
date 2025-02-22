@@ -32,6 +32,7 @@ import { formatTimeAgo } from "../../utils/formatTimeAgo";
 import { RandomAvatar } from "../RandomAvatar";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../../lib/supabase";
+import { createSocket } from "../../lib/socket";
 
 const { width } = Dimensions.get("window");
 
@@ -53,24 +54,23 @@ export const Post: React.FC<PostProps> = ({
   user,
 }) => {
   const [liked, setLiked] = useState(false);
-  const [localLikes, setLocalLikes] = useState(post.likes);
+  const [localLikes, setLocalLikes] = useState(post?.likes || 0);
   const [showComments, setShowComments] = useState(false);
   const heartScale = useSharedValue(0);
   const [newComment, setNewComment] = useState("");
   const [isAddingComment, setIsAddingComment] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = postService.subscribeToLikes(post.id, (newLikes) => {
-      setLocalLikes(newLikes);
-    });
-
-    return () => unsubscribe();
-  }, [post.id]);
+  const socket = createSocket(user?.id);
 
   useEffect(() => {
+    setLocalLikes(post?.likes || 0);
+  }, [post?.likes]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Check initial like status
     const checkLikeStatus = async () => {
-      if (!user) return;
-
       const { data } = await supabase
         .from("post_likes")
         .select()
@@ -87,16 +87,16 @@ export const Post: React.FC<PostProps> = ({
   const handleLike = async () => {
     if (!user) return;
 
-    const newLikedState = !liked; // Toggle like state
+    const newLikedState = !liked;
     setLiked(newLikedState);
     setLocalLikes((prev) => (newLikedState ? prev + 1 : prev - 1));
 
-    const { success } = await postService.likePost(post.id, user.id);
-    if (!success) {
-      // Revert on failure
-      setLiked(!newLikedState);
-      setLocalLikes((prev) => (newLikedState ? prev - 1 : prev + 1));
-    }
+    // Emit like event to socket server
+    socket.emit("like_post", {
+      postId: post.id,
+      userId: user.id,
+      liked: newLikedState,
+    });
   };
 
   const onDoubleTap = ({
@@ -139,15 +139,14 @@ export const Post: React.FC<PostProps> = ({
         <View style={styles.cardContent}>
           <View style={styles.header}>
             <View style={styles.userInfo}>
-              <RandomAvatar seed={post.profile.avatar_seed} size={32} />
+              <RandomAvatar
+                seed={post?.profile?.avatar_seed || "default"}
+                size={40}
+              />
               <View style={styles.headerText}>
-                <Text style={styles.username}>
-                  {post.profile.username.length > 15
-                    ? `${post.profile.username.slice(0, 15)}...`
-                    : post.profile.username}
-                </Text>
+                <Text style={styles.username}>Anonymous</Text>
                 <Text style={styles.time}>
-                  {formatTimeAgo(post.created_at)}
+                  {formatTimeAgo(post?.created_at || new Date().toISOString())}
                 </Text>
               </View>
             </View>
@@ -160,7 +159,7 @@ export const Post: React.FC<PostProps> = ({
             </TouchableOpacity>
           </View>
 
-          {post.image_url && (
+          {post?.image_url && (
             <View style={styles.imageContainer}>
               <Image
                 source={{ uri: post.image_url }}
@@ -170,7 +169,7 @@ export const Post: React.FC<PostProps> = ({
             </View>
           )}
 
-          <Text style={styles.contentText}>{post.content}</Text>
+          <Text style={styles.contentText}>{post?.content}</Text>
 
           <View style={styles.footer}>
             <TouchableOpacity style={styles.footerItem} onPress={handleLike}>

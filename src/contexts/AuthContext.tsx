@@ -147,7 +147,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         try {
           if (session?.user) {
             setUser(session.user);
-            const profileData = await checkProfile();
+            // Immediately check for profile when user is available
+            const { data: profileData, error: profileError } = await supabase
+              .from("profiles")
+              .select("id, username, avatar_seed, coins")
+              .eq("id", session.user.id)
+              .single();
+
+            if (profileError && profileError.code !== "PGRST116") {
+              throw profileError;
+            }
+
+            if (profileData) {
+              setProfile(profileData);
+            }
+
             console.log("Auth state update complete:", {
               hasUser: true,
               hasProfile: !!profileData,
@@ -158,7 +172,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           } else {
             setUser(null);
             setProfile(null);
-            console.log("Auth state cleared");
           }
         } catch (error) {
           console.error("Error in auth state change:", error);
@@ -172,18 +185,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const initAuth = async () => {
       if (!mounted) return;
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setUser(session.user);
-          const profileData = await checkProfile();
-          console.log("Initial auth check complete:", {
-            hasUser: true,
-            hasProfile: !!profileData,
-          });
-        } else {
-          console.log("No initial session");
+          // Immediately check for profile
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("id, username, avatar_seed, coins")
+            .eq("id", session.user.id)
+            .single();
+
+          if (profileData) {
+            setProfile(profileData);
+          }
         }
       } catch (error) {
         console.error("Error in initial auth check:", error);
