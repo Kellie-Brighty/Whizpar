@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -37,6 +37,8 @@ import { supabase } from "../../lib/supabase";
 import { createSocket } from "../../lib/socket";
 import { BottomSheetModal, BottomSheetView } from "@gorhom/bottom-sheet";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { nanoid } from "nanoid";
 
 const { width, height } = Dimensions.get("window");
 
@@ -47,6 +49,7 @@ interface PostProps {
   onLike?: () => void;
   likeAnimatedStyle?: any;
   user: any;
+  onViewableItemsChanged?: boolean;
 }
 
 export const Post: React.FC<PostProps> = ({
@@ -56,6 +59,7 @@ export const Post: React.FC<PostProps> = ({
   onLike,
   likeAnimatedStyle,
   user,
+  onViewableItemsChanged,
 }) => {
   const [liked, setLiked] = useState(false);
   const [localLikes, setLocalLikes] = useState(post?.likes || 0);
@@ -69,6 +73,8 @@ export const Post: React.FC<PostProps> = ({
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(
     new Set()
   );
+  const [hasViewed, setHasViewed] = useState(false);
+  const [viewerId, setViewerId] = useState<string | null>(null);
 
   const socket = createSocket(user?.id);
 
@@ -162,9 +168,24 @@ export const Post: React.FC<PostProps> = ({
       }));
     });
 
+    // Update view count listener
+    socket.on("view_update", (data: { postId: string; viewCount: number }) => {
+      console.log("📈 Received view update:", data);
+      if (data.postId === post.id) {
+        console.log("Updating view count for post:", post.id);
+        setCurrentPost((prev) => ({
+          ...prev,
+          view_count: data.viewCount,
+        }));
+        // Also update the original post prop
+        post.view_count = data.viewCount;
+      }
+    });
+
     return () => {
       socket.off("new_comment");
       socket.off("comment_like_update");
+      socket.off("view_update");
     };
   }, [socket, post.id]);
 
@@ -179,6 +200,56 @@ export const Post: React.FC<PostProps> = ({
 
     fetchComments();
   }, [post.id]);
+
+  useEffect(() => {
+    const initializeViewer = async () => {
+      let id = await AsyncStorage.getItem("@viewer_id");
+      if (!id) {
+        id = nanoid();
+        await AsyncStorage.setItem("@viewer_id", id);
+      }
+      setViewerId(id);
+    };
+
+    initializeViewer();
+  }, []);
+
+  // Handle view tracking
+  const handleView = useCallback(async () => {
+    if (!hasViewed && user?.id) {
+      console.log("Starting view registration process:", {
+        postId: post.id,
+        userId: user.id,
+        socketId: socket.id,
+      });
+
+      try {
+        await postService.registerView(post.id, user.id);
+        console.log("View registration completed");
+        setHasViewed(true);
+      } catch (error) {
+        console.error("View registration failed:", error);
+      }
+    }
+  }, [hasViewed, user?.id, post.id, socket.id]);
+
+  useEffect(() => {
+    if (onViewableItemsChanged === true && !hasViewed) {
+      console.log("🔍 View timer starting for post:", {
+        postId: post.id,
+        hasViewed,
+        onViewableItemsChanged,
+      });
+      const timer = setTimeout(async () => {
+        console.log("⏰ Timer finished, calling handleView for post:", post.id);
+        await handleView();
+      }, 3000);
+      return () => {
+        console.log("🧹 Cleaning up timer for post:", post.id);
+        clearTimeout(timer);
+      };
+    }
+  }, [onViewableItemsChanged, hasViewed]);
 
   const handleLike = async () => {
     if (!user) return;
@@ -336,24 +407,33 @@ export const Post: React.FC<PostProps> = ({
           <Text style={styles.contentText}>{post?.content}</Text>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.footerItem} onPress={handleLike}>
-              <Icon
-                name={liked ? "heart" : "heart-outline"}
-                size={20}
-                color={liked ? "#FF4D9C" : "#7C4DFF"}
-              />
-              <Text style={[styles.footerText, liked && { color: "#FF4D9C" }]}>
-                {localLikes}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", gap: 16 }}>
+              <TouchableOpacity style={styles.footerItem} onPress={handleLike}>
+                <Icon
+                  name={liked ? "heart" : "heart-outline"}
+                  size={20}
+                  color={liked ? "#FF4D9C" : "#7C4DFF"}
+                />
+                <Text
+                  style={[styles.footerText, liked && { color: "#FF4D9C" }]}
+                >
+                  {localLikes}
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.footerItem}
-              onPress={handleShowComments}
-            >
-              <Icon name="comment-outline" size={20} color="#7C4DFF" />
-              <Text style={styles.footerText}>{commentCount}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.footerItem}
+                onPress={handleShowComments}
+              >
+                <Icon name="comment-outline" size={20} color="#7C4DFF" />
+                <Text style={styles.footerText}>{commentCount}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.footerItem, { alignSelf: "flex-end" }]}>
+              <Icon name="eye-outline" size={20} color="#7C4DFF" />
+              <Text style={styles.footerText}>{post.view_count || 0}</Text>
+            </View>
           </View>
         </View>
 
@@ -636,6 +716,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 16,
     marginTop: 4,
+    justifyContent: "space-between",
   },
   footerItem: {
     flexDirection: "row",

@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -16,6 +22,7 @@ import {
   ActivityIndicator,
   FlatList,
   Dimensions,
+  ViewToken,
 } from "react-native";
 import { Post } from "../../components/posts/Post";
 import { usePost } from "../../context/PostContext";
@@ -212,7 +219,15 @@ const WhisperCard = ({ item }: { item: Whisper }) => {
 };
 
 // Create an enhanced Post component with animations
-const AnimatedPost = ({ item, index }: { item: PostType; index: number }) => {
+const AnimatedPost = ({
+  item,
+  index,
+  isViewable,
+}: {
+  item: PostType;
+  index: number;
+  isViewable?: boolean;
+}) => {
   const scale = useSharedValue(1);
   const likeScale = useSharedValue(1);
   const { user } = useAuth();
@@ -248,6 +263,7 @@ const AnimatedPost = ({ item, index }: { item: PostType; index: number }) => {
         }}
         onLike={handleLike}
         likeAnimatedStyle={likeAnimatedStyle}
+        onViewableItemsChanged={isViewable}
       />
     </Animated.View>
   );
@@ -418,6 +434,27 @@ export const FeedScreen = () => {
     </View>
   );
 
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      viewableItems.forEach((viewableItem) => {
+        if (viewableItem.isViewable && viewableItem.item?.id) {
+          const post = viewableItem.item as PostType;
+          setFeeds((prev) =>
+            prev.map((item) =>
+              item.id === post.id ? { ...item, isViewable: true } : item
+            )
+          );
+        }
+      });
+    },
+    []
+  );
+
+  const viewabilityConfig = {
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 1000,
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "right", "left"]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
@@ -477,11 +514,15 @@ export const FeedScreen = () => {
       <Animated.FlatList
         contentContainerStyle={[
           styles.listContainer,
-          { paddingBottom: Platform.OS === 'ios' ? 120 : 100 }  // Increase bottom padding on iOS
+          { paddingBottom: Platform.OS === "ios" ? 120 : 100 }, // Increase bottom padding on iOS
         ]}
         data={feeds}
         renderItem={({ item, index }) => (
-          <AnimatedPost item={item} index={index} />
+          <AnimatedPost
+            item={item}
+            index={index}
+            isViewable={item.isViewable || false}
+          />
         )}
         keyExtractor={(item) => item.id}
         refreshControl={
@@ -495,6 +536,8 @@ export const FeedScreen = () => {
         ListEmptyComponent={!loading ? EmptyFeed : null}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
       />
     </SafeAreaView>
   );

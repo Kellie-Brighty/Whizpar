@@ -43,6 +43,8 @@ io.use((socket: CustomSocket, next) => {
 });
 
 io.on("connection", (socket: CustomSocket) => {
+  console.log("New socket connection:", socket.id);
+
   console.log(`User ${socket.userId} connected`);
 
   socket.on(
@@ -210,6 +212,56 @@ io.on("connection", (socket: CustomSocket) => {
       }
     }
   );
+
+  // Add to existing socket connection handler
+  socket.on("register_view", async (data: { 
+    postId: string, 
+    userId: string
+  }) => {
+    console.log("Server processing view registration:", {
+      socketId: socket.id,
+      ...data
+    });
+    try {
+      console.log("1. Inserting view record");
+      const { error: insertError } = await supabase
+        .from("post_views")
+        .insert({
+          post_id: data.postId,
+          user_id: data.userId
+        })
+        .single();
+      
+      if (insertError) console.log("Insert error:", insertError);
+
+      console.log("2. Getting view count");
+      const { data: viewCount } = await supabase
+        .from("post_views")
+        .select("id", { count: "exact" })
+        .eq("post_id", data.postId);
+
+      console.log("3. Updating post count:", viewCount?.length);
+      await supabase
+        .from("posts")
+        .update({ view_count: viewCount?.length || 0 })
+        .eq("id", data.postId);
+
+      console.log("4. Broadcasting update");
+      const updatedViewCount = viewCount?.length || 0;
+      console.log("Broadcasting view update:", {
+        postId: data.postId,
+        viewCount: updatedViewCount
+      });
+      
+      io.emit("view_update", {
+        postId: data.postId,
+        viewCount: updatedViewCount
+      });
+
+    } catch (error) {
+      console.error("Error handling view:", error);
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3001;

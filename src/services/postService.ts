@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { createSocket } from "../lib/socket";
 
 export type Comment = {
   id: string;
@@ -30,6 +31,8 @@ export type Post = {
     avatar_seed: string;
   };
   comments?: Comment[];
+  view_count: number;
+  isViewable?: boolean;
 };
 
 type PostgresChangesPayload = {
@@ -389,5 +392,28 @@ export const postService = {
       console.log("Cleaning up post engagements subscription");
       supabase.removeChannel(channel);
     };
+  },
+
+  registerView: async (postId: string, userId: string) => {
+    try {
+      const socket = createSocket(userId);
+      console.log("🔌 Socket state for view registration:", {
+        postId,
+        userId,
+        socketConnected: socket.connected,
+        socketId: socket.id,
+      });
+
+      socket.emit("register_view", {
+        postId,
+        userId,
+      });
+      console.log("📤 Emitted register_view event");
+
+      return { error: null };
+    } catch (error) {
+      console.error("❌ Error registering view:", error);
+      return { error };
+    }
   },
 };
