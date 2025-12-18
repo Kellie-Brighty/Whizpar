@@ -14,23 +14,49 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { CircularProgress } from "../common/CircularProgress";
 import { postService } from "../../services/postService";
-import { useAuth } from "../../contexts/AuthContext";
 import { storageService } from "../../services/storageService";
 
 interface CreatePostSheetProps {
   onPost: (content: string, image?: string) => Promise<void>;
 }
 
+
 export const CreatePostSheet = forwardRef<
   BottomSheetModal,
   CreatePostSheetProps
 >(({ onPost }, ref) => {
+  const snapPoints = ["70%"];
+  const bottomSheetRef = ref as React.RefObject<BottomSheetModal>;
+
+  const handleSuccess = () => {
+    bottomSheetRef.current?.dismiss();
+  };
+
+  return (
+    <BottomSheetModal ref={ref} snapPoints={snapPoints} enablePanDownToClose>
+      <BottomSheetView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Create Whizpar</Text>
+          <Text style={styles.subtitle}>Share your thoughts anonymously</Text>
+        </View>
+
+        <CreatePostForm onPost={onPost} onSuccess={handleSuccess} />
+      </BottomSheetView>
+    </BottomSheetModal>
+  );
+});
+
+interface CreatePostFormProps {
+  onPost: (content: string, image?: string) => Promise<void>;
+  onSuccess: () => void;
+}
+
+
+const CreatePostForm = ({ onPost, onSuccess }: CreatePostFormProps) => {
   const [content, setContent] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { user } = useAuth();
-  const bottomSheetRef = ref as React.RefObject<BottomSheetModal>;
-  const snapPoints = ["70%"];
+  const inputRef = React.useRef<TextInput>(null);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -53,7 +79,7 @@ export const CreatePostSheet = forwardRef<
   };
 
   const handlePost = async () => {
-    if (!content.trim() || !user) return;
+    if (!content.trim()) return;
 
     try {
       setIsLoading(true);
@@ -68,89 +94,84 @@ export const CreatePostSheet = forwardRef<
       }
 
       await onPost(content, imageUrl);
-      setContent("");
-      setImage(null);
 
-      if (ref && typeof ref === "object" && ref.current) {
-        ref.current.dismiss();
-      }
+      setContent("");
+      inputRef.current?.clear();
+      setImage(null);
+      onSuccess();
     } catch (error) {
       console.error("Error creating post:", error);
+      alert("Failed to create post");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <BottomSheetModal ref={ref} snapPoints={snapPoints} enablePanDownToClose>
-      <BottomSheetView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Create Whisper</Text>
-          <Text style={styles.subtitle}>Share your thoughts anonymously</Text>
-        </View>
+    <>
+      <View style={styles.inputContainer}>
+        <TextInput
+          ref={inputRef}
+          style={[styles.input, image && styles.inputWithImage]}
+          placeholder="What's on your mind?"
+          placeholderTextColor="rgba(255,255,255,0.5)"
+          multiline
+          defaultValue={content}
+          onChangeText={setContent}
+          maxLength={500}
+        />
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={[styles.input, image && styles.inputWithImage]}
-            placeholder="What's on your mind?"
-            placeholderTextColor="rgba(255,255,255,0.5)"
-            multiline
-            value={content}
-            onChangeText={setContent}
-            maxLength={500}
-          />
-
-          {image && (
-            <View style={styles.imagePreview}>
-              <Image source={{ uri: image }} style={styles.previewImage} />
-              <TouchableOpacity
-                style={styles.removeImage}
-                onPress={() => setImage(null)}
-              >
-                <Icon name="close-circle" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <Text style={styles.charCount}>{content.length}/500</Text>
-        </View>
-
-        <View style={styles.actions}>
-          <TouchableOpacity onPress={pickImage} style={styles.imageButton}>
-            <Icon name="image-plus" size={24} color="#7C4DFF" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.postButton,
-              !content.trim() && styles.postButtonDisabled,
-            ]}
-            onPress={handlePost}
-            disabled={!content.trim() || isLoading}
-          >
-            <LinearGradient
-              colors={["#7C4DFF", "#FF4D9C"]}
-              style={styles.postGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+        {image && (
+          <View style={styles.imagePreview}>
+            <Image source={{ uri: image }} style={styles.previewImage} />
+            <TouchableOpacity
+              style={styles.removeImage}
+              onPress={() => setImage(null)}
             >
-              {isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <CircularProgress progress={0} size={24} />
-                </View>
-              ) : (
-                <>
-                  <Icon name="send" size={20} color="#FFFFFF" />
-                  <Text style={styles.postButtonText}>Post Whisper</Text>
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-      </BottomSheetView>
-    </BottomSheetModal>
+              <Icon name="close-circle" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <Text style={styles.charCount}>{content.length}/500</Text>
+      </View>
+
+      <View style={styles.actions}>
+        <TouchableOpacity onPress={pickImage} style={styles.imageButton}>
+          <Icon name="image-plus" size={24} color="#7C4DFF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.postButton,
+            !content.trim() && styles.postButtonDisabled,
+          ]}
+          onPress={handlePost}
+          disabled={!content.trim() || isLoading}
+        >
+          <LinearGradient
+            colors={["#7C4DFF", "#FF4D9C"]}
+            style={styles.postGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <CircularProgress progress={0} size={24} />
+              </View>
+            ) : (
+              <>
+                <Icon name="send" size={20} color="#FFFFFF" />
+                <Text style={styles.postButtonText}>Post Whizpar</Text>
+              </>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </>
   );
-});
+};
+
 
 const styles = StyleSheet.create({
   container: {

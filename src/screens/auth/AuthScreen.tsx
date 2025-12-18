@@ -41,7 +41,8 @@ import { RegionRestrictedScreen } from "../region/RegionRestrictedScreen";
 import { SmallLoadingMask } from "../../components/animations/SmallLoadingMask";
 import { authService } from "../../services/authService";
 import { useNavigation } from "@react-navigation/native";
-import { supabase } from "../../lib/supabase";
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useAuth } from "../../contexts/AuthContext";
 
 const { width, height } = Dimensions.get("window");
@@ -128,80 +129,53 @@ export const AuthScreen = () => {
 
       if (isLogin) {
         // Login flow
-        const { data: authData, error: authError } =
-          await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
+        const { user, error: authError } = await authService.signIn(
+          email,
+          password
+        );
 
         if (authError) throw authError;
 
-        if (authData.user) {
-          console.log("Sign in successful:", authData.user.id);
+        if (user) {
+          console.log('Sign in successful:', user.uid);
 
           // Wait for auth state to be set
           await new Promise((resolve) => setTimeout(resolve, 500));
 
           // Now check profile
-          const { data: profileData, error: profileError } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", authData.user.id)
-            .single();
+          const profileRef = doc(db, 'users', user.uid);
+          const profileSnap = await getDoc(profileRef);
 
-          if (profileError && profileError.code !== "PGRST116") {
-            throw profileError;
-          }
-
-          console.log("Direct profile check:", {
-            userId: authData.user.id,
-            hasProfile: !!profileData,
-            profileData,
+          console.log('Direct profile check:', {
+            userId: user.uid,
+            hasProfile: profileSnap.exists(),
           });
 
           // Set the profile in AuthContext
-          if (profileData) {
-            setProfile(profileData);
+          if (profileSnap.exists()) {
+            setProfile(profileSnap.data() as any);
           }
         }
       } else {
         // Signup flow
-        const { error: checkError } = await supabase.auth.signInWithPassword({
-          email,
-          password: "dummy-password-for-check",
-        });
-
-        if (
-          !checkError ||
-          !checkError.message.includes("Invalid login credentials")
-        ) {
-          throw new Error("Email already exists. Please sign in instead.");
-        }
-
-        // If email doesn't exist, proceed with signup
-        const { data: signUpData, error: signUpError } =
-          await supabase.auth.signUp({
-            email,
-            password,
-          });
+        const { user: signUpUser, error: signUpError } =
+          await authService.signUp(email, password);
 
         if (signUpError) throw signUpError;
 
-        if (signUpData.user) {
-          console.log("Sign up successful:", {
-            userId: signUpData.user.id,
-            email: signUpData.user.email,
+        if (signUpUser) {
+          console.log('Sign up successful:', {
+            userId: signUpUser.uid,
+            email: signUpUser.email,
           });
 
           // Clear form
-          setEmail("");
-          setPassword("");
+          setEmail('');
+          setPassword('');
           setIsLogin(true); // Switch to login mode
 
           // Show success message
-          setError(
-            "Please check your email for verification link, then sign in."
-          );
+          setError('Account created! Please sign in.');
         }
       }
     } catch (err) {

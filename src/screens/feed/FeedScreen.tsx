@@ -51,9 +51,9 @@ import { LoadingOverlay } from "../../components/common/LoadingOverlay";
 import { postService, Post as PostType } from "../../services/postService";
 import { useAuth } from "../../contexts/AuthContext";
 import Toast from "react-native-toast-message";
-import { supabase } from "../../lib/supabase";
 
-import { createSocket } from "../../lib/socket";
+
+
 
 // Updated mock data with real images
 // const MOCK_POSTS: PostType[] = [
@@ -299,7 +299,7 @@ export const FeedScreen = () => {
   const scale = useSharedValue(1);
   const createPostRef = useRef<BottomSheetModal>(null);
   const { user } = useAuth();
-  const socket = useMemo(() => createSocket(user?.id), [user?.id]);
+  // const socket = useMemo(() => createSocket(user?.uid), [user?.uid]); // Removed socket
 
   const loadFeeds = async (silent = false) => {
     try {
@@ -319,26 +319,27 @@ export const FeedScreen = () => {
   useEffect(() => {
     loadFeeds();
 
-    // Listen for new posts
-    socket.on("new_post", (newPost: PostType) => {
-      setFeeds((prev) => [newPost, ...prev]);
+    // Subscribe to new posts
+    const unsubscribeNewPosts = postService.subscribeToNewPosts((newPost) => {
+       setFeeds((prev) => {
+        // Avoid duplicates
+        if (prev.find(p => p.id === newPost.id)) return prev;
+        return [newPost, ...prev];
+       });
     });
 
-    // Listen for like updates
-    socket.on(
-      "like_update",
-      ({ postId, likesCount }: { postId: string; likesCount: number }) => {
-        setFeeds((prev) =>
-          prev.map((feed) =>
-            feed.id === postId ? { ...feed, likes: likesCount } : feed
-          )
-        );
-      }
-    );
+    // Subscribe to engagement updates (likes, comments, etc.)
+    const unsubscribeEngagements = postService.subscribeToPostEngagements((updatedPost) => {
+       setFeeds((prev) => 
+        prev.map((post) => 
+          post.id === updatedPost.id ? { ...post, ...updatedPost } : post
+        )
+       );
+    });
 
     return () => {
-      socket.off("new_post");
-      socket.off("like_update");
+      unsubscribeNewPosts();
+      unsubscribeEngagements();
     };
   }, [activeTab]);
 
@@ -352,17 +353,18 @@ export const FeedScreen = () => {
     if (!user) return;
 
     try {
-      // Emit create_post event to socket server
-      socket.emit("create_post", {
-        content,
-        userId: user.id,
-        image,
-      });
+      // Use Firebase service instead of socket
+      const { post, error } = await postService.createPost(content, user.uid, image);
 
-      Toast.show({
-        type: "success",
-        text1: "Post created successfully",
-      });
+      if (error) throw error;
+
+      if (post) {
+        setFeeds((prev) => [post, ...prev]);
+        Toast.show({
+          type: "success",
+          text1: "Post created successfully",
+        });
+      }
     } catch (error) {
       console.error("Error creating post:", error);
       Toast.show({
@@ -427,7 +429,7 @@ export const FeedScreen = () => {
   const EmptyFeed = () => (
     <View style={styles.emptyContainer}>
       <Icon name="post-outline" size={64} color="#666" />
-      <Text style={styles.emptyText}>No whispers yet</Text>
+      <Text style={styles.emptyText}>No whizpars yet</Text>
       <Text style={styles.emptySubtext}>
         Be the first to share your thoughts
       </Text>
@@ -464,7 +466,7 @@ export const FeedScreen = () => {
       <BlurView intensity={20} style={styles.header}>
         <Surface style={styles.headerContent}>
           <View style={styles.titleContainer}>
-            <Text style={styles.title}>Whispers</Text>
+            <Text style={styles.title}>Whizpar</Text>
             <Text style={styles.subtitle}>Share your thoughts</Text>
           </View>
           <TouchableOpacity
@@ -784,11 +786,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     backgroundColor: "#1E1E1E",
-    elevation: 4,
-    shadowColor: "#7C4DFF",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    // Removed shadows/elevation as requested
     marginHorizontal: 16,
   },
   emptyContainer: {

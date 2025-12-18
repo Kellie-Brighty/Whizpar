@@ -8,6 +8,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { RootStackParamList } from "./types";
 import { CreateProfileScreen } from "../screens/profile/CreateProfileScreen";
 
+import { View } from "react-native";
+import { PulsingLoader } from "../components/ui/PulsingLoader";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
@@ -20,8 +22,13 @@ export const RootNavigator = () => {
     });
   }, []);
 
+
   if (loading) {
-    return null;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#121212" }}>
+        <PulsingLoader />
+      </View>
+    );
   }
 
   console.log("RootNavigator navigation state:", {
