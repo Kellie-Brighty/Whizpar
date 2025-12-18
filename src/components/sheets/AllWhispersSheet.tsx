@@ -26,7 +26,7 @@ export const AllWhispersSheet = forwardRef<
     >
       <BottomSheetView style={styles.container}>
         <SafeAreaView edges={["top"]} style={styles.safeArea}>
-          <Text style={styles.title}>All Whispers</Text>
+          <Text style={styles.title}>All Whizpars</Text>
           <ScrollView
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
