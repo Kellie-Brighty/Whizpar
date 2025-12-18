@@ -1,15 +1,15 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { authService } from "../services/authService";
-import { User, AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authService } from '../services/authService';
+import { User } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Profile = {
   id: string;
   username: string;
   avatar_seed: string;
   coins: number;
-  // Add any other profile fields here
 };
 
 type AuthContextType = {
@@ -46,48 +46,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const checkProfile = async () => {
     if (!user) {
-      console.log("checkProfile: No user to check profile for");
+      console.log('checkProfile: No user to check profile for');
       return null;
     }
 
     try {
-      console.log("checkProfile: Checking profile for user:", user.id);
+      console.log('checkProfile: Checking profile for user:', user.uid);
 
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, username, avatar_seed, coins")
-        .eq("id", user.id)
-        .single();
+      const profileRef = doc(db, 'users', user.uid);
+      const profileSnap = await getDoc(profileRef);
 
-      console.log("checkProfile: Database response:", {
-        data,
-        error: error ? { code: error.code, message: error.message } : null,
-        userId: user.id,
+      console.log('checkProfile: Database response:', {
+        exists: profileSnap.exists(),
+        userId: user.uid,
       });
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          console.log("checkProfile: No profile found for user:", user.id);
-          setProfile(null);
-          return null;
-        }
-        throw error;
-      }
-
-      if (data) {
-        console.log("checkProfile: Profile found and set:", {
-          userId: user.id,
+      if (profileSnap.exists()) {
+        const data = profileSnap.data() as Profile;
+        console.log('checkProfile: Profile found and set:', {
+          userId: user.uid,
           username: data.username,
         });
         setProfile(data);
         return data;
       }
 
-      console.log("checkProfile: No data returned for user:", user.id);
+      console.log('checkProfile: No profile found for user:', user.uid);
       setProfile(null);
       return null;
     } catch (error) {
-      console.error("checkProfile: Error checking profile:", error);
+      console.error('checkProfile: Error checking profile:', error);
       setProfile(null);
       return null;
     }
@@ -96,24 +84,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const createProfile = async (username: string, avatarSeed: string) => {
     if (!user) return null;
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .insert([
-          {
-            id: user.id,
-            username,
-            avatar_seed: avatarSeed,
-            coins: 1000,
-          },
-        ])
-        .select()
-        .single();
+      const profileData: Profile = {
+        id: user.uid,
+        username,
+        avatar_seed: avatarSeed,
+        coins: 1000,
+      };
 
-      if (error) throw error;
-      setProfile(data);
-      return data;
+      const profileRef = doc(db, 'users', user.uid);
+      await setDoc(profileRef, profileData);
+
+      setProfile(profileData);
+      return profileData;
     } catch (error) {
-      console.error("Error creating profile:", error);
+      console.error('Error creating profile:', error);
       return null;
     }
   };
@@ -121,96 +105,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const handleSignOut = async () => {
     try {
       await authService.signOut();
-      await AsyncStorage.removeItem("@user_avatar");
+      await AsyncStorage.removeItem('@user_avatar');
       setUser(null);
       setProfile(null);
     } catch (error) {
-      console.error("Error signing out:", error);
+      console.error('Error signing out:', error);
     }
   };
 
   useEffect(() => {
     let mounted = true;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      async (event: AuthChangeEvent, session: Session | null) => {
-        console.log("Auth state changed:", {
-          event,
-          hasUser: !!session?.user,
-          userId: session?.user?.id,
-        });
+    const unsubscribe = authService.onAuthStateChanged(async (firebaseUser) => {
+      if (mounted) setLoading(true); // Start loading immediately
 
-        if (!mounted) return;
+      console.log('Auth state changed:', {
+        hasUser: !!firebaseUser,
+        userId: firebaseUser?.uid,
+      });
 
-        try {
-          if (session?.user) {
-            setUser(session.user);
-            // Immediately check for profile when user is available
-            const { data: profileData, error: profileError } = await supabase
-              .from("profiles")
-              .select("id, username, avatar_seed, coins")
-              .eq("id", session.user.id)
-              .single();
+      if (!mounted) return;
 
-            if (profileError && profileError.code !== "PGRST116") {
-              throw profileError;
-            }
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          // Immediately check for profile when user is available
+          const profileRef = doc(db, 'users', firebaseUser.uid);
+          const profileSnap = await getDoc(profileRef);
 
-            if (profileData) {
-              setProfile(profileData);
-            }
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data() as Profile;
+            setProfile(profileData);
 
-            console.log("Auth state update complete:", {
+            console.log('Auth state update complete:', {
               hasUser: true,
-              hasProfile: !!profileData,
-              event,
-              userId: session.user.id,
-              profileUsername: profileData?.username,
+              hasProfile: true,
+              userId: firebaseUser.uid,
+              profileUsername: profileData.username,
             });
           } else {
-            setUser(null);
-            setProfile(null);
+            console.log('Auth state update complete:', {
+              hasUser: true,
+              hasProfile: false,
+              userId: firebaseUser.uid,
+            });
           }
-        } catch (error) {
-          console.error("Error in auth state change:", error);
-        } finally {
-          if (mounted) setLoading(false);
-        }
-      }
-    );
-
-    // Initial check
-    const initAuth = async () => {
-      if (!mounted) return;
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          setUser(session.user);
-          // Immediately check for profile
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("id, username, avatar_seed, coins")
-            .eq("id", session.user.id)
-            .single();
-
-          if (profileData) {
-            setProfile(profileData);
-          }
+        } else {
+          setUser(null);
+          setProfile(null);
         }
       } catch (error) {
-        console.error("Error in initial auth check:", error);
+        console.error('Error in auth state change:', error);
       } finally {
         if (mounted) setLoading(false);
       }
-    };
-
-    initAuth();
+    });
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
@@ -230,3 +183,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     </AuthContext.Provider>
   );
 };
+

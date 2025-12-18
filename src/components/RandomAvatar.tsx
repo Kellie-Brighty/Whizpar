@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet } from "react-native";
-import { SvgXml } from "react-native-svg";
-
-const AVATAR_API_URL = "https://api.dicebear.com/9.x/lorelei/svg";
+import React, { useMemo } from "react";
+import { View, Text, StyleSheet } from "react-native";
+import { getEmojiAvatar, getAvatarColor } from "../utils/emojiUtils";
 
 interface RandomAvatarProps {
   seed: string;
@@ -13,25 +11,23 @@ export const RandomAvatar: React.FC<RandomAvatarProps> = ({
   seed,
   size = 80,
 }) => {
-  const [svgContent, setSvgContent] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchAvatar = async () => {
-      try {
-        const response = await fetch(`${AVATAR_API_URL}?seed=${seed}`);
-        const svgText = await response.text();
-        setSvgContent(svgText);
-      } catch (error) {
-        console.error("Error fetching avatar:", error);
-      }
-    };
-
-    fetchAvatar();
-  }, [seed]);
+  const emoji = useMemo(() => getEmojiAvatar(seed), [seed]);
+  const backgroundColor = useMemo(() => getAvatarColor(seed), [seed]);
+  const fontSize = size * 0.6; // Emoji size relative to container
 
   return (
-    <View style={styles.container}>
-      {svgContent && <SvgXml xml={svgContent} width={size} height={size} />}
+    <View
+      style={[
+        styles.container,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor,
+        },
+      ]}
+    >
+      <Text style={{ fontSize }}>{emoji}</Text>
     </View>
   );
 };
@@ -40,7 +36,6 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 50, // Make the avatar circular
     overflow: "hidden",
   },
 });

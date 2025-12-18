@@ -34,21 +34,18 @@ import { RandomAvatar } from "../../components/RandomAvatar";
 import { LinearGradient } from "expo-linear-gradient";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { fonts } from "../../theme/fonts";
-import { CoinPurchaseSheet } from "../../components/sheets/CoinPurchaseSheet";
-import { TransactionHistorySheet } from "../../components/sheets/TransactionHistorySheet";
+
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { AvatarPickerSheet } from "../../components/sheets/AvatarPickerSheet";
-import { PublicNudgeSheet } from "../../components/sheets/PublicNudgeSheet";
-import { eventEmitter } from "../../utils/EventEmitter";
-import { PublicNudge } from "../../types";
 import Toast from "react-native-toast-message";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { useAuth } from "../../contexts/AuthContext";
-import { supabase } from "../../lib/supabase";
-import { Post as PostType } from "../../services/postService";
+import { collection, query, where, orderBy, limit, getDocs, getDoc, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { Post as PostType, postService } from "../../services/postService";
 import { formatTimeAgo } from "../../utils/formatTimeAgo";
 import { RecentWhispers } from "../../components/profile/RecentWhispers";
-import { createSocket } from "../../lib/socket";
+
 import { AllWhispersSheet } from "../../components/sheets/AllWhispersSheet";
 
 const { width, height } = Dimensions.get("window");
@@ -183,7 +180,6 @@ export const ProfileScreen = () => {
   );
   const modalScale = useSharedValue(0.8);
   const previewScale = useSharedValue(1);
-  const [hasActiveNudges, setHasActiveNudges] = useState(false);
   const [userPosts, setUserPosts] = useState<PostType[]>([]);
   const [loading, setLoading] = useState(false);
   const [recentPosts, setRecentPosts] = useState<PostType[]>([]);
@@ -196,89 +192,81 @@ export const ProfileScreen = () => {
     transform: [{ scale: previewScale.value }],
   }));
 
-  const purchaseSheetRef = useRef<BottomSheetModal>(null);
-  const historySheetRef = useRef<BottomSheetModal>(null);
+
   const avatarPickerRef = useRef<BottomSheetModal>(null);
-  const publicNudgeRef = useRef<BottomSheetModal>(null);
   const allWhispersRef = useRef<BottomSheetModal>(null);
 
   const { profile, setProfile, signOut, user } = useAuth();
 
-  // Add socket connection
-  const socket = useMemo(() => createSocket(user?.id), [user?.id]);
-
+  // const socket = useMemo(() => createSocket(user?.uid), [user?.uid]); // Removed socket
+  
   useEffect(() => {
-    console.log("Current profile data in ProfileScreen:", profile);
-  }, [profile]);
-
-  useEffect(() => {
-    const loadAvatar = async () => {
-      const storedAvatar = await AsyncStorage.getItem("@user_avatar");
-      if (storedAvatar) {
-        setAvatarSeed(storedAvatar);
-      }
-    };
-
-    loadAvatar();
-  }, []);
-
-  useEffect(() => {
-    if (profile) {
-      loadUserPosts();
-      subscribeToUserPosts();
-    }
-  }, [profile]);
-
-  useEffect(() => {
-    // Listen for like updates
-    socket.on("like_update", ({ postId, likesCount }) => {
-      setUserPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId ? { ...post, likes: likesCount } : post
-        )
-      );
-      setRecentPosts((prev) =>
-        prev.map((post) =>
-          post.id === postId ? { ...post, likes: likesCount } : post
-        )
-      );
-    });
-
-    // Listen for new posts
-    socket.on("new_post", (newPost: PostType) => {
-      if (newPost.user_id === user?.id) {
+    // Subscribe to new posts
+    const unsubscribeNewPosts = postService.subscribeToNewPosts((newPost) => {
+      // Only add if it belongs to the current user
+      if (newPost.user_id === user?.uid) {
         setUserPosts((prev) => [newPost, ...prev]);
         setRecentPosts((prev) => [newPost, ...prev]);
       }
     });
 
+    // Subscribe to engagement updates
+    const unsubscribeEngagements = postService.subscribeToPostEngagements((updatedPost) => {
+       const updateList = (prev: PostType[]) => 
+        prev.map((post) => 
+          post.id === updatedPost.id ? { ...post, ...updatedPost } : post
+        );
+
+       setUserPosts(updateList);
+       setRecentPosts(updateList);
+    });
+
     return () => {
-      socket.off("like_update");
-      socket.off("new_post");
+      unsubscribeNewPosts();
+      unsubscribeEngagements();
     };
-  }, [socket, user?.id]);
+  }, [user?.uid]);
+
+
+
+  // Initial load
+  useEffect(() => {
+    loadUserPosts();
+  }, [profile?.id]);
 
   const loadUserPosts = async () => {
     if (!profile) return;
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("posts")
-        .select(
-          `
-          *,
-          profile:profiles(username, avatar_seed)
-        `
-        )
-        .eq("user_id", profile.id)
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const postsRef = collection(db, 'posts');
+      const q = query(
+        postsRef,
+        where('user_id', '==', profile.id),
+        orderBy('created_at', 'desc')
+      );
 
-      if (error) throw error;
-      setUserPosts(data as PostType[]);
+      const querySnapshot = await getDocs(q);
+      const posts: PostType[] = [];
+
+      for (const docSnap of querySnapshot.docs) {
+        const postData = docSnap.data();
+        const userRef = doc(db, 'users', postData.user_id);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+
+        posts.push({
+          id: docSnap.id,
+          ...postData,
+          created_at: postData.created_at?.toDate?.()?.toISOString() || new Date().toISOString(),
+          username: userData?.username || 'Anonymous',
+          avatar_seed: userData?.avatar_seed || 'default',
+        } as PostType);
+      }
+
+      setUserPosts(posts);
     } catch (error) {
-      console.error("Error loading user posts:", error);
+      console.error('Error loading user posts:', error);
     } finally {
       setLoading(false);
     }
@@ -287,115 +275,23 @@ export const ProfileScreen = () => {
   const subscribeToUserPosts = () => {
     if (!profile) return;
 
-    const subscription = supabase
-      .channel(`user-posts-${profile.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "posts",
-          filter: `user_id=eq.${profile.id}`,
-        },
-        () => {
-          // Reload posts when changes occur
-          loadUserPosts();
-        }
-      )
-      .subscribe();
+    const postsRef = collection(db, 'posts');
+    const q = query(postsRef, where('user_id', '==', profile.id));
 
-    return () => {
-      supabase.removeChannel(subscription);
-    };
+    const unsubscribe = onSnapshot(q, () => {
+      loadUserPosts();
+    });
+
+    return unsubscribe;
   };
-
-  const handleAvatarSelect = async (seed: string) => {
-    try {
-      console.log("Selected Avatar Seed:", seed);
-
-      // Update avatar in database
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({ avatar_seed: seed })
-        .eq("id", profile?.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Update local states
-      if (data) {
-        setAvatarSeed(seed);
-        setProfile(data);
-        await AsyncStorage.setItem("@user_avatar", seed);
-        setModalVisible(false);
-
-        Toast.show({
-          type: "success",
-          text1: "Avatar Updated",
-          text2: "Your new identity is ready!",
-        });
-
-        console.log("Avatar updated:", {
-          userId: profile?.id,
-          newSeed: seed,
-        });
-      }
-    } catch (error) {
-      console.error("Error updating avatar:", error);
-      Toast.show({
-        type: "error",
-        text1: "Update Failed",
-        text2: "Could not update your avatar",
-      });
-    }
-  };
-
-  const avatarSeeds = Array.from({ length: 10 }, () =>
-    Math.random().toString(36).substring(7)
-  );
 
   const handleLogout = async () => {
     await signOut();
   };
 
-  const handleBuyCoins = () => {
-    purchaseSheetRef.current?.present();
-  };
 
-  const handleShowHistory = () => {
-    historySheetRef.current?.present();
-  };
 
-  const handleCreateNudge = async (data: {
-    title: string;
-    description: string;
-    image?: string;
-    duration: number;
-  }) => {
-    try {
-      const newNudge: PublicNudge = {
-        id: Date.now().toString(),
-        title: data.title,
-        description: data.description,
-        imageUrl: data.image,
-        daysLeft: data.duration,
-        impressions: 0,
-        createdAt: new Date().toISOString(),
-      };
 
-      eventEmitter.emit("newNudge", newNudge);
-      setHasActiveNudges(true);
-
-      Toast.show({
-        type: "success",
-        text1: "Nudge Created",
-        text2: "Your promotion is now live!",
-      });
-    } catch (error) {
-      console.error("Error creating nudge:", error);
-    }
-  };
 
   const navigateToPost = (post: PostType) => {
     // @ts-ignore - Navigation typing issue
@@ -444,11 +340,28 @@ export const ProfileScreen = () => {
               allWhispersRef.current?.present();
             }}
           >
-            <Text style={styles.showMoreText}>Show More Whispers</Text>
+            <Text style={styles.showMoreText}>Show More Whizpars</Text>
           </TouchableOpacity>
         )}
       </View>
     );
+  };
+
+  const stats = useMemo(() => {
+    return userPosts.reduce(
+      (acc, post) => ({
+        totalWhispers: userPosts.length,
+        totalImpact: acc.totalImpact + (post.likes || 0) + ((post.comment_count || 0) * 2),
+      }),
+      { totalWhispers: 0, totalImpact: 0 }
+    );
+  }, [userPosts]);
+
+  const formatNumber = (num: number) => {
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'k';
+    }
+    return num.toString();
   };
 
   return (
@@ -460,16 +373,12 @@ export const ProfileScreen = () => {
         <BlurView intensity={40} style={StyleSheet.absoluteFill} />
         <Animated.View style={[styles.headerContent, headerContentStyle]}>
           <View style={styles.avatarWrapper}>
-            <RandomAvatar seed={profile?.avatar_seed || "default"} size={120} />
-            <TouchableOpacity
-              style={styles.editIcon}
-              onPress={() => avatarPickerRef.current?.present()}
-            >
-              <Icon name="pencil" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={styles.incognitoCircle}>
+              <Icon name="incognito" size={60} color="#7C4DFF" />
+            </View>
           </View>
           <Text style={styles.username}>{profile?.username}</Text>
-          <Text style={styles.bio}>Whispering thoughts into the void</Text>
+          <Text style={styles.bio}>Whizparing thoughts into the void</Text>
         </Animated.View>
       </Animated.View>
 
@@ -488,8 +397,8 @@ export const ProfileScreen = () => {
             style={styles.statsGradient}
           >
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>42</Text>
-              <Text style={styles.statLabel}>Whispers</Text>
+              <Text style={styles.statNumber}>{stats.totalWhispers}</Text>
+              <Text style={styles.statLabel}>Whizpars</Text>
               <View style={styles.statIconContainer}>
                 <Icon
                   name="message-text"
@@ -500,7 +409,7 @@ export const ProfileScreen = () => {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statNumber}>1.2k</Text>
+              <Text style={styles.statNumber}>{formatNumber(stats.totalImpact)}</Text>
               <Text style={styles.statLabel}>Impact</Text>
               <View style={styles.statIconContainer}>
                 <Icon name="star" size={20} color="rgba(255,255,255,0.3)" />
@@ -509,96 +418,10 @@ export const ProfileScreen = () => {
           </LinearGradient>
         </View>
 
-        <View style={styles.coinsSection}>
-          <LinearGradient
-            colors={["rgba(255, 215, 0, 0.15)", "rgba(124, 77, 255, 0.15)"]}
-            style={styles.coinsContainer}
-          >
-            <Animated.View
-              entering={FadeIn.duration(500)}
-              style={styles.balanceContainer}
-            >
-              <View style={styles.innerBalanceContainer}>
-                <Icon name="currency-usd" size={50} color="#FFD700" />
-                <Text style={styles.balanceText}>{profile?.coins}</Text>
-              </View>
-              <Text style={styles.coinLabel}>Whizpar Coins</Text>
-            </Animated.View>
 
-            <View style={styles.coinActions}>
-              <TouchableOpacity
-                style={styles.coinActionButton}
-                onPress={handleBuyCoins}
-              >
-                <LinearGradient
-                  colors={["#FFD700", "#FFA000"]}
-                  style={styles.actionGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Icon name="plus" size={20} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Buy Coins</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.coinActionButton}
-                onPress={handleShowHistory}
-              >
-                <LinearGradient
-                  colors={["#7C4DFF", "#FF4D9C"]}
-                  style={styles.actionGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Icon name="history" size={20} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>History</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.benefitsContainer}>
-              <Text style={styles.benefitsTitle}>Coin Benefits</Text>
-              <View style={styles.benefitsList}>
-                <View style={styles.benefitItem}>
-                  <Icon name="palette" size={20} color="#7C4DFF" />
-                  <Text style={styles.benefitText}>Custom Avatars</Text>
-                  <Text style={styles.benefitPrice}>500 coins</Text>
-                </View>
-                <View style={styles.benefitItem}>
-                  <Icon name="bullhorn" size={20} color="#7C4DFF" />
-                  <Text style={styles.benefitText}>Public Nudge</Text>
-                  <TouchableOpacity
-                    onPress={() => publicNudgeRef.current?.present()}
-                    style={styles.createNudgeButton}
-                  >
-                    <Text style={styles.createNudgeText}>Create</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-
-            {hasActiveNudges && (
-              <TouchableOpacity
-                style={styles.viewNudgesButton}
-                onPress={() => navigation.navigate("Nudges")}
-              >
-                <LinearGradient
-                  colors={["#7C4DFF", "#FF4D9C"]}
-                  style={styles.viewNudgesGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Icon name="bullhorn" size={20} color="#FFFFFF" />
-                  <Text style={styles.viewNudgesText}>View My Promotions</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
-          </LinearGradient>
-        </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Whispers</Text>
+          <Text style={styles.sectionTitle}>Recent Whizpars</Text>
           <RecentWhispersComponent />
         </View>
 
@@ -630,19 +453,7 @@ export const ProfileScreen = () => {
         </View>
       </Animated.ScrollView>
 
-      <AvatarPickerSheet
-        ref={avatarPickerRef}
-        onSelect={handleAvatarSelect}
-        selectedSeed={avatarSeed}
-      />
 
-      <CoinPurchaseSheet ref={purchaseSheetRef} />
-      <TransactionHistorySheet ref={historySheetRef} />
-      <PublicNudgeSheet
-        ref={publicNudgeRef}
-        availableCoins={1250}
-        onSubmit={handleCreateNudge}
-      />
       <AllWhispersSheet ref={allWhispersRef} posts={userPosts} user={user} />
     </SafeAreaViewCompat>
   );
@@ -856,6 +667,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     width: "100%",
   },
+  incognitoCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "rgba(124, 77, 255, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(124, 77, 255, 0.3)",
+  },
+
   columnWrapper: {
     justifyContent: "center",
   },

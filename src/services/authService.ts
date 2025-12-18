@@ -1,27 +1,35 @@
-import { supabase } from "../lib/supabase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  User,
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const authService = {
   // Sign up new user
   signUp: async (email: string, password: string) => {
     try {
-      console.log("Starting signup process");
-      const {
-        data: { user },
-        error: signUpError,
-      } = await supabase.auth.signUp({
+      console.log('Starting signup process');
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
         email,
-        password,
-      });
+        password
+      );
+      const user = userCredential.user;
 
-      console.log("Signup complete:", {
+
+      console.log('Signup complete:', {
         hasUser: !!user,
-        hasError: !!signUpError,
+        userId: user?.uid,
       });
 
-      if (signUpError) throw signUpError;
       return { user, error: null };
     } catch (error) {
-      console.error("Error signing up:", error);
+      console.error('Error signing up:', error);
       return { user: null, error };
     }
   },
@@ -29,47 +37,32 @@ export const authService = {
   // Sign in existing user
   signIn: async (email: string, password: string) => {
     try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.signInWithPassword({
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
         email,
-        password,
-      });
+        password
+      );
+      const user = userCredential.user;
 
-      if (error) throw error;
+      
       return { user, error: null };
     } catch (error) {
-      console.error("Error signing in:", error);
+      console.error('Error signing in:', error);
       return { user: null, error };
     }
   },
-
-  // Get current session
-  getSession: async () => {
-    try {
-      console.log("Getting session...");
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-      console.log("Session result:", !!session, "Error:", !!error);
-      if (error) throw error;
-      return { session, error: null };
-    } catch (error) {
-      console.error("Error getting session:", error);
-      return { session: null, error };
-    }
+  // Get current user
+  getCurrentUser: () => {
+    return auth.currentUser;
   },
 
   // Sign out
   signOut: async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      await firebaseSignOut(auth);
       return { error: null };
     } catch (error) {
-      console.error("Error signing out:", error);
+      console.error('Error signing out:', error);
       return { error };
     }
   },
@@ -77,20 +70,23 @@ export const authService = {
   // Check if user has a profile
   checkProfile: async (userId: string) => {
     try {
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
+      const profileRef = doc(db, 'users', userId);
+      const profileSnap = await getDoc(profileRef);
 
-      if (error && error.code !== "PGRST116") {
-        throw error;
+      if (profileSnap.exists()) {
+        return { profile: profileSnap.data(), error: null };
       }
 
-      return { profile, error: null };
+      return { profile: null, error: null };
     } catch (error) {
-      console.error("Error checking profile:", error);
+      console.error('Error checking profile:', error);
       return { profile: null, error };
     }
   },
+
+  // Auth state listener
+  onAuthStateChanged: (callback: (user: User | null) => void) => {
+    return onAuthStateChanged(auth, callback);
+  },
 };
+
